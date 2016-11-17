@@ -1,11 +1,11 @@
 pages:
   stage: deploy
   script:
-    - apk update && apk add doxygen
-    - doxygen doc/Doxyfile
-    - mv doc/html/ public/
+  - mkdir .public
+  - cp -r doc/html .public
+  - mv .public public
   artifacts:
     paths:
-      - public
+    - public
   only:
-    - master
+  - master
