@@ -1,10 +1,10 @@
 pages:
-	stage: deploy
-	script:
-		- doxygen doc/Doxyfile
-		- mv doc/html/ public/
-	artifacts:
-		paths:
-			- public
-	only:
-		- master
+  stage: deploy
+  script:
+    - doxygen doc/Doxyfile
+    - mv doc/html/ public/
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
