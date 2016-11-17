@@ -58,7 +58,7 @@ PROJECT_LOGO           =
 # entered, it will be relative to the location where doxygen was started. If
 # left blank the current directory will be used.
 
-OUTPUT_DIRECTORY       = /home/developer/projects/roboalpha/catkin/src/i2cpwm_board/doc
+OUTPUT_DIRECTORY       = doc
 
 # If the CREATE_SUBDIRS tag is set to YES then doxygen will create 4096 sub-
 # directories (in 2 levels) under the output directory of each output format and
@@ -896,8 +896,8 @@ EXCLUDE_SYMBOLS        =
 # that contain example code fragments that are included (see the \include
 # command).
 
-EXAMPLE_PATH           = /home/developer/projects/roboalpha/catkin/src/i2cpwm_board/msg \
-                         /home/developer/projects/roboalpha/catkin/src/i2cpwm_board/srv \
+EXAMPLE_PATH           = msg \
+                         srv \
                          /opt/ros/kinetic/share/geometry_msgs/msg
 
 # If the value of the EXAMPLE_PATH tag contains directories, you can use the

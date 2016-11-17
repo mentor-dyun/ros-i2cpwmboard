@@ -1,6 +1,7 @@
 pages:
   stage: deploy
   script:
+    - apk update && apk add doxygen
     - doxygen doc/Doxyfile
     - mv doc/html/ public/
   artifacts:
