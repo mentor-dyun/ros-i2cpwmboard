@@ -1,0 +1,3 @@
+<launch>
+   <node pkg="locoro_pwm16ctrl" name="locoro_pwm16ctrl_node" type="locoro_pwm16ctrl" output="screen"/>
+</launch>

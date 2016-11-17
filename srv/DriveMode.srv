@@ -1,0 +1,10 @@
+# the drive_mode service is used to assigned servos to various drive modes
+# the drive modes determine how the assigned servos respond to geometry Twist messages
+# drive modes are one of: ackerman, differential, or mecanum
+# scalar is used to scale incoming Twist values to the  ±1000 scale used by this package
+
+string mode
+int16 scale
+Servo[] servos
+---
+int16 error
