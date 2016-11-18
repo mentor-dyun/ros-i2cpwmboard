@@ -1,3 +1,3 @@
 <launch>
-   <node pkg="locoro_pwm16ctrl" name="locoro_pwm16ctrl_node" type="locoro_pwm16ctrl" output="screen"/>
+   <node pkg="i2cpwm_board" name="i2cpwm_board_node" type="i2cpwm_board" output="screen"/>
 </launch>
