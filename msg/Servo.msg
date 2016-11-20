@@ -3,4 +3,4 @@
 # dependent on the topic or service being called
 
 int16 servo
-int16 value
+float32 value
