@@ -52,8 +52,8 @@
 		- servos_proportional()
 		- servos_drive()
     - public services:
-		- set_pwm_active_board()
 		- set_pwm_frequency()
+		- set_active_board()
 		- config_servos()
 		- config_drive_mode()
 		- stop_servos()
@@ -92,7 +92,7 @@
   The pulse is defined as a start value and end value. When driving servos, the start point is typically 0 and the end point is the duration.
 
   FYI: If using more than one PWM board or when using a board with an I2C address other than the default 0x40, 
-  the set_pwm_active_board() service must be used before using other services or topics from this package.
+  the set_active_board() service must be used before using other services or topics from this package.
  
 
 \section configuration CONFIGURING SERVOS
@@ -109,32 +109,34 @@
 
   __note:__ The centering value and range of servos is dependent on the pulse frequency. 
   If you use set_pwm_frequency() to change the system value, you will need to determine new center and range values.
-  
+
+  The servos_proportional() topic controls servos through their range of motion using values between -1.0 and 1.0.
   Use the config_servos() service to set the center values, range values, and directions of rotation for servos.
-  This enables servo motion to be generalized to a standard proportion ±1.0.
+  This enables servo motion to be generalized to a standard proportion of ±1.0.
+  Use of the config_servos() service is required before proportional control is available. 
+
   
 \section drivemode ROBOT DRIVE MODE
 
   In addition to absolute and proportional topics for controling servos, this package provides support for the geometry 'Twist' message.
-  The servos_drive() topic handles the calculations to covert linear and angular data to servo drive data.
+  The servos_drive() topic handles the calculations to convert linear and angular data to servo drive data.
 
-  This package supports three drive modes:
+  Drive mode requires details for each servo. Use of the config_servos() before using drive mode.
+
+  The geometry_msgs::Twist providesf linear and angular velocity measured in m/s (meters per second) and r/s (radians per second) respectively.
+  To perform the necessary calculations, data about the drive system is required.
+  Use config_drive_mode() to provide the RPM of the drive wheels, their radius, and the track distance between left and right. These values determine speed and turn rates.
+
+  Specifiy the desired drive mode with the `mode` property to cofig_drive_mode(). This package supports three drive modes:
   
-    -# 'ackerman' - single drive with external automobile style steering
-    -# 'differential' - skid steer or track steer using a servo (or servos) for each of the left and right.
-	A very simple algorythm is used.
-	The result is the ability to perform zero-radius turns at a maximum of 50% speed
-	and a full speed full turn (controller with max forward/reverse and max left/right is equal to the wheel base.
-    -# 'mecanum' - requires a servo (or multiple servos) for each of left-front, right-front, left-rear, and right-rear wheels.
-	Similar drive characteristics to differential drive with the additional of lateral motion.
+    -# __ackerman__ - A single velocity drive using one or more servos with a non-drive servo controlling steering.
+    -# __differential__ - Skid steer or track steer using one or more  servos for each of the left and right sides.
+	The result is full speed forward or reverse, min/max radius turns, and the ability to perform zero-radius turns
+    -# __mecanum__ - Independent drive on all four wheel capable of holonomic drive - moving in any combination of forward, reverse, turning, and sideways. 
+	The servos are assigned positons for left-front, right-front, left-rear, and right-rear wheels. This mode supports
+	similar drive characteristics to differential drive with the additional of lateral motion.
 
 
-  In order to aproximate the geometry_msgs::Twist use of linear and angular velocity measured in m/s (meters per second), 
-  drive mode configuration needs to know the PWM motor maximum output RPM to the drive wheel/sprocket and the radious of the drive wheel/sprocket.
-
-  Servo configuration is a prerequisite to using the servos_proportional() topic subscriber. 
-  It is also a requirement before using the config_drive_mode() servie API and its related servos_drive() topic subscriber.
-  
   The servos on the PWM board are assigned to their respective drive positons using the config_drive_mode() service.
   The applicable servos are assigned positions as follows:
   
@@ -149,9 +151,9 @@
 
   All non-drive servos may still be operated with the proportion or absolute topics.
 
-  __Note:__ This controller does not implemente encoders for PWM motors. The resutl is there is no guarantee that the drive velocity will exactly match the Twist message input.
-  While this is not acceptable for a commercial or scientific application, for education and amatuer competitions, this can be compensated by other means. 
-  Additionally, when drive control is a product of positional feedback - such as line following and navigation via camera vision - drive encoders are usually not required.
+  __Note:__ _This controller does not implement encoders for PWM motors. There is no guarantee that the drive velocity will exactly match the Twist message input.
+  While this may not be acceptable for a commercial or scientific application, it may not be of convern for education and amatuer competitions. Encoders could be added and feedback applied to the PWM values.
+  Additionally, when drive control is a product of positional feedback - such as line following and navigation via camera vision - drive encoders are usually not required._
 
   The stop_servos() service is provided as convenience to stop all servos and place then is a powered off state. This is different from setting each servo to its center value.
   The stop service is useful as a safety operation.
@@ -302,8 +304,8 @@ static float _absmin (float v1, float v2)
 {
 	float a1, a2;
 	float sign = 1.0;
-	if (v1 < 0)
-		sign = -1.0;
+	//	if (v1 < 0)
+	//		sign = -1.0;
 	a1 = _abs(v1);
 	a2 = _abs(v2);
 	if (a1 > a2)
@@ -315,8 +317,8 @@ static float _absmax (float v1, float v2)
 {
 	float a1, a2;
 	float sign = 1.0;
-	if (v1 < 0)
-		sign = -1.0;
+	//	if (v1 < 0)
+	//		sign = -1.0;
 	a1 = _abs(v1);
 	a2 = _abs(v2);
 	if (a1 < a2)
@@ -370,9 +372,9 @@ static float _convert_mps_to_proportional (float speed)
 	max_rate = (_active_drive.radius * _PI * 2) * (_active_drive.rpm / 60.0);
 
 	speed = speed / max_rate;
-	speed = _absmin (speed, 1.0);
+	// speed = _absmin (speed, 1.0);
 
-	ROS_DEBUG("%6.4f = convert_mps_to_proportional ( speed(%6.4f) / ((radus(%6.4f) * pi(%6.4f) * 2) & (rpm(%6.4f) / 60.0)) )", speed, initial, _active_drive.radius, _PI, _active_drive.rpm);
+	ROS_DEBUG("%6.4f = convert_mps_to_proportional ( speed(%6.4f) / ((radus(%6.4f) * pi(%6.4f) * 2) * (rpm(%6.4f) / 60.0)) )", speed, initial, _active_drive.radius, _PI, _active_drive.rpm);
 	return speed;
 }
 
@@ -383,7 +385,7 @@ static float _convert_mps_to_proportional (float speed)
  *The pulse defined by start/stop will be active on all channels until any subsequent call changes it.
  *@param start an int value (0..4096) indicating when the pulse will go high sending power to each channel.
  *@param end an int value (0..4096) indicating when the pulse will go low stoping power to each channel.
- *Example: _set_pwm_interval_all (0, 108)   // set all servos with a pulse width of 105
+ *Example _set_pwm_interval_all (0, 108)   // set all servos with a pulse width of 105
  */
 static void _set_pwm_interval_all (int start, int end)
 {
@@ -412,7 +414,7 @@ static void _set_pwm_interval_all (int start, int end)
  *@param servo an int value (1..16) indicating which channel to change power
  *@param start an int value (0..4096) indicating when the pulse will go high sending power to each channel.
  *@param end an int value (0..4096) indicating when the pulse will go low stoping power to each channel.
- *Example: _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
+ *Example _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
  */
 static void _set_pwm_interval (int servo, int start, int end)
 {
@@ -450,7 +452,7 @@ static void _set_pwm_interval (int servo, int start, int end)
  *The pulse defined by start/stop will be active on the specified servo channel until any subsequent call changes it.
  *@param servo an int value (1..16) indicating which channel to change power
  *@param value an int value (±1.0) indicating when the size of the pulse for the channel.
- *Example: _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
+ *Example _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
  */
 static void _set_pwm_interval_proportional (int servo, float value)
 {
@@ -486,7 +488,7 @@ static void _set_pwm_interval_proportional (int servo, float value)
  *
  *The pulse defined by start/stop will be active on all channels until any subsequent call changes it.
  *@param frequency an int value (1..15000) indicating the pulse frequency where 50 is typical for RC servos
- *Example: _set_frequency (68)  // set the pulse frequency to 68Hz
+ *Example _set_frequency (68)  // set the pulse frequency to 68Hz
  */
 static void _set_pwm_frequency (int freq)
 {
@@ -534,7 +536,7 @@ static void _set_pwm_frequency (int freq)
  * \private method to set the active board
  *
  *@param board an int value (1..62) indicating which board to activate for subsequent service and topic subscription activity where 1 coresponds to the default board address of 0x40 and value increment up
- *Example: _set_active_board (68)   // set the pulse frequency to 68Hz
+ *Example _set_active_board (68)   // set the pulse frequency to 68Hz
  */
 static void _set_active_board (int board)
 {
@@ -589,7 +591,7 @@ static void _set_active_board (int board)
 
 @param devicename a string value indicating the linux I2C device
 
-Example: _init ("/dev/i2c-1");  // default I2C device on RPi2 and RPi3 = "/dev/i2c-1"
+Example _init ("/dev/i2c-1");  // default I2C device on RPi2 and RPi3 = "/dev/i2c-1"
  */
 static void _init (char* filename)
 {
@@ -657,21 +659,28 @@ static void _init (char* filename)
    __i2cpwm_board::Servo__
    \include "Servo.msg"
 
-   __Example:__
+   __Example__
    \code{.sh}
+   # this example makes the following assumptions about the hardware
+   # the servos have been connected to the PWM board starting with the first connector and proceeding in order
+   # any drive servos used for the left side servos are mounted opposite of those for the right side
+
    # the follow message sets the PWM value of the first two servos to 250 and 350 respectively.
-   # depending on center value o feach servo, these values may casue forward or backward rotation
+   # depending on center value of each servo, these values may casue forward or backward rotation
+
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 250}, {servo: 2, value: 350}]}"
-   #
+
    # the following messages are an example of finding a continuous servo's center
+   # in this example the center is found to be 333
+
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 300}]}"
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 350}]}"
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 320}]}"
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 330}]}"
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 335}]}"
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 334}]}"
-   # this servo's center is 334
+   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 333}]}"
    \endcode
+
  */
 void servos_absolute (const i2cpwm_board::ServoArray::ConstPtr& msg)
 {
@@ -719,17 +728,7 @@ void servos_absolute (const i2cpwm_board::ServoArray::ConstPtr& msg)
    __i2cpwm_board::Servo Message__
    \include "Servo.msg"
 
-   __Example:__
-   \code{.sh}
-   # config_servos() must be called prior to using the `servos_proportional` topic
-   #
-   # the follow message sets the PWM value of the first two servos to 40 (out of a possible ±1.0)
-   rostopic pub -1 /servos_proportional i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 0.40}, {servo: 2, value: 0.40}]}"
-   \endcode
-
-
-
-   __Example:__
+   __Example__
    \code{.sh}
    # this example makes the following assumptions about the hardware
    # the servos have been connected to the PWM board starting with the first connector and proceeding in order
@@ -738,116 +737,24 @@ void servos_absolute (const i2cpwm_board::ServoArray::ConstPtr& msg)
    # this example uses 2 servos
    # the first servo is the left and the second servo is the right
 
-   # this example assumes there are 4 servos
-   # the servos are 1, 2, 3, & 4 and correspond to left-front, right-front, left-rear, and right-rear
+   # configure two continuous rotation servos associated with the drive system - these servos were determined to have a ragee of ±50
 
-   # the follow message sets the PWM value of the first two servos to 250 and 350 respectively.
-   # depending on center value o feach servo, these values may casue forward or backward rotation
+   rosservice call /config_servos "servos: [{servo: 1, center: 333, range: 100, direction: -1}, \
+                                            {servo: 2, center: 336, range: 108, direction: 1}]"
 
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 250}, {servo: 2, value: 350}]}"
-   
-   # the following messages are an example of finding the center position of a continuous servo
-   # in this example the servo center is found to be 334
+   # drive both servos forward at 40% of maximum speed
 
-   # servo rotating clockwise
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 300}]}"
-
-   # servo rotating anti clockwise
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 350}]}"
-
-   # servo rotating clockwise slow
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 320}]}"
-
-   # servo rotating clockwise slower
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 330}]}"
-
-   # servo rotating anti clockwise very slowly
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 335}]}"
-
-   # servo not moving
-   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 334}]}"
-
-
-
-   # proportional movement
-
-   # configure two servos which have been mounted opposed to one another
-   rosservice call /config_servos "servos: [{servo: 1, center: 333, range: 100, direction: -1}, {servo: 2, center: 336, range: 100, direction: 1}]" 
-
-   # drive both servos forward at the 40% point on the speed curve (see introduction for an over view of the speed/movement curve)
    rostopic pub -1 /servos_proportional i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 0.40}, {servo: 2, value: 0.40}]}"
 
+   # additionally configure one 180 degree servo (±90) used for a robot arm - this servo was determine to have a ragee of ±188
 
-   # configure two continuous rotation servos associated with the drive system - this servo was determine to have a ragee of ±50
-   rosservice call /config_servos "servos: [{servo: 1, center: 336, range: 100, direction: 1}, {servo: 2, center: 333, range: 100, direction: -1}]" 
-
-   # additionally configure one 180 degree servo used for a robot arm - this servo was determine to have a ragee of ±188
    rosservice call /config_servos "servos: [{servo: 9, center: 344, range: 376, direction: -1}]" 
 
-   # drive the servo to its 45 degree position (50% of 90) then to its -45 degree position
+   # drive the arm servo to its 45 degree position and then to its -45 degree position
+
    rostopic pub -1 /servos_proportional i2cpwm_board/ServoArray "{servos:[{servo: 9, value: 0.50}]}"
    rostopic pub -1 /servos_proportional i2cpwm_board/ServoArray "{servos:[{servo: 9, value: -0.50}]}"
-
-
-
-   # a differential drive example
-
-   # ROS used m/s (meters per second) as teh standard unit for velocity. The geometry_msgs::Twist linear and angular vectors are in m/s.
-
-   # a typical high-speed servo is capable of 0.16-0.2 sec/60deg or aproximately 50-65 RPM.
-   # using 12cm diameter wheels results in a circumference of 0.375m
-   # the theoretical maximum speed of this combination is only 0.30m/s - 0.40m/s
-
-
-   # configure drive mode for two RC servos attached to 100mm diameter wheels 
-   rosservice call /config_servos "servos: [{servo: 1, center: 336, range: 100, direction: 1}, {servo: 2, center: 333, range: 100, direction: -1}]"
-   rosservice call /config_drive_mode "{mode: differential, rpm: 60.0, radius: 5.0, scale: 1.0, servos: [{servo: 1, value: 1}, {servo: 2, value: 2}]}"
-
-   # moving forward at 0.35 m/s (or best speed)
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 0.0, 0.0], angular: [0.0, 0.0, 0.0]}"
-
-   # left 45 degrees per second turn while moving forward at 0.35 m/s (or best speed)
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 0.0, 0.0], angular: [0.0, 0.0, -0.7854]}"
-
-   # pivoting clockwise at 90 degrees per second
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, 0.0, 0.0], angular: [0.0, 0.0, 1.5708]}"
-
-
-
-   # a mecanum drive example
-
-   # configure drive mode for four servos
-   rosservice call /config_servos "servos: [{servo: 1, center: 336, range: 100, direction: 1}, {servo: 2, center: 333, range: 100, direction: -1}, {servo: 3, center: 337, range: 100, direction: -1}, {servo: 4, center: 330, range: 100, direction: -1}]"
-   rosservice call /config_drive_mode "{mode: mecanum, scale: 1.0, servos: [{servo: 1, value: 2}, {servo: 2, value: 1}, {servo: 3, value: 3}, {servo: 4, value: 4}]}" 
-
-   # moving forward at full speed
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35.0, 0.0, 0.0], angular: [0.0, 0.0, 0.0]}"
-
-   # moving forward and to the right while always facing forward
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 0.15.0, 0.0], angular: [0.0, 0.0, 0.0]}"
-
-   # right turn while moving forward
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 00.0, 0.0], angular: [0.0, 0.0, 0.7854]}"
-
-   # pivoting clockwise
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, 0.0, 0.0], angular: [0.0, 0.0, 1.5708]}"
-
-   # moving sideways to the right
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, 0.2, 0.0], angular: [0.0, 0.0, 0.0]}"
-
-   # moving sideways to the left
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, -0.2.0, 0.0], angular: [0.0, 0.0, 0.0]}"
-
-
-   # stopping servos is not the same as setting their speed/position to their center value
-   # setting speed or position to the center maintains power to the servo and acts like a brake
-   # sending the stop command to the servos puts them in a power off state and they will coast to stop regardless of their resting position
-   rosservice call /stop_servos
    \endcode
-
-
-
-
  */
 void servos_proportional (const i2cpwm_board::ServoArray::ConstPtr& msg)
 {
@@ -869,34 +776,101 @@ void servos_proportional (const i2cpwm_board::ServoArray::ConstPtr& msg)
    Subscriber for controlling a group of servos in concert based on a geometry_msgs::Twist message.
 
    This topic requires the use the config_servos() service to configure the servos for proportional control
-   and the use of the config_drive() to speccify the desired type of drive and to assign individual servos to the positions in the drive system. 
+   and the use of the config_drive_mode() to speccify the desired type of drive and to assign individual servos to the positions in the drive system. 
 
    @param msg a geometry Twist message
-
-   __Example:__
-   \code{.sh}
-   # this example assumes config_servos() has been called to set the center, range, and direction of two servos.
-   # this example assumes config_drive_mode() has been called to set "differential" mode, with servo 1 as left and servo 2 as right, and scale as 1.0
-   #
-   # the follow message drives the robot forward and somewhat to the left
-   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [50.0, 0.0, 0.0], angular: [0.0, 0.0, 25.0]}"
-   \endcode
-
-   # if the first four servos are already connected and correspond to FL, FR, RL, and RR, then the following configured each servo and sets up mecanum drive mode
-   rosservice call /config_servos "servos: [{servo: 1, center: 336, range: 100, direction: -1}, {servo: 2, center: 333, range: 100, direction: 1}, {servo: 3, center: 337, range: 100, direction: -1}, {servo: 4, center: 330, range: 100, direction: 1}]"
-   rosservice call /config_drive_mode "{mode: mecanum, scale: 1.0, servos: [{servo: 1, value: 1}, {servo: 2, value: 2}, {servo: 3, value: 3}, {servo: 4, value: 4}]}"
 
    __geometry_msgs::Twist__
    \include "Twist.msg"
    __geometry_msgs::Vector3__
    \include "Vector3.msg"
+
+   __Example__
+   \code{.sh}
+   # this example makes the following assumptions about the hardware
+   # the servos have been connected to the PWM board starting with the first connector and proceeding in order
+   # any drive servos used for the left side servos are mounted opposite of those for the right side
+
+   # ROS used m/s (meters per second) as th standard unit for velocity.
+   # The geometry_msgs::Twist linear and angular vectors are in m/s and radians/s respectively.
+
+   # a typical high-speed servo is capable of 0.16-0.2 sec/60deg or aproximately 50-65 RPM.
+   # using wheel with 11 cm diameter results in a circumference of 0.35 meters
+   # the theoretical maximum speed of this combination is 0.30 m/s - 0.40 m/s
+
+
+   # differential drive example
+   # this example uses 2 servos
+   # the first servo is the left and the second servo is the right
+
+   # configure drive mode for two RC servos attached to 110mm diameter wheels 
+
+   rosservice call /config_servos "servos: [{servo: 1, center: 333, range: 100, direction: -1}, \
+                                            {servo: 2, center: 336, range: 108, direction: 1}]"
+
+   rosservice call /config_drive_mode "{mode: differential, rpm: 60.0, radius: 5.5, track: 5, scale: 1.0, \
+                                        servos: [{servo: 1, value: 1}, {servo: 2, value: 2}]}"
+
+   # moving forward at 0.35 m/s (or best speed)
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 0.0, 0.0], angular: [0.0, 0.0, 0.0]}"
+
+   # left 45 degrees per second turn while moving forward at 0.35 m/s (or best speed)
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 0.0, 0.0], angular: [0.0, 0.0, -0.7854]}"
+
+   # pivoting clockwise at 90 degrees per second
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, 0.0, 0.0], angular: [0.0, 0.0, 1.5708]}"
+
+
+   # a mecanum drive example
+   # this example assumes there are 4 servos
+   # the servos are 1, 2, 3, & 4 and correspond to left-front, right-front, left-rear, and right-rear
+
+   # configure drive mode for four servos
+
+   rosservice call /config_servos "servos: [{servo: 1, center: 333, range: 100, direction: 1},  \
+                                            {servo: 2, center: 336, range: 108, direction: -1}, \
+											{servo: 3, center: 337, range: 102, direction: -1}, \
+											{servo: 4, center: 330, range: 100, direction: -1}]"
+
+   rosservice call /config_drive_mode "{mode: mecanum,  rpm: 60.0, radius: 5.5, track: 5, scale: 1.0, \
+                                        servos: [{servo: 1, value: 2}, {servo: 2, value: 1}, \
+                                                 {servo: 3, value: 3}, {servo: 4, value: 4}]}" 
+
+   # moving forward at full speed
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35.0, 0.0, 0.0], angular: [0.0, 0.0, 0.0]}"
+
+   # moving forward and to the right while always facing forward
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 0.15, 0.0], angular: [0.0, 0.0, 0.0]}"
+
+   # right turn while moving forward
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.35, 0.0, 0.0], angular: [0.0, 0.0, 0.7854]}"
+
+   # pivoting clockwise
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, 0.0, 0.0], angular: [0.0, 0.0, 1.5708]}"
+
+   # moving sideways to the right
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, 0.2, 0.0], angular: [0.0, 0.0, 0.0]}"
+
+   # moving sideways to the left
+
+   rostopic pub -1 /servos_drive geometry_msgs/Twist "{linear: [0.0, -0.2, 0.0], angular: [0.0, 0.0, 0.0]}"
+
+   \endcode
  */
 void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 {
 	/* this subscription works on the active_board */
 
 	int i;
-	float delta;
+	float delta, range, ratio;
 	float temp_x, temp_y, temp_r;
 	float dir_x, dir_y, dir_r;
 	float speed[4];
@@ -920,16 +894,24 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 	dir_y = ((msg->linear.y  < 0) ? -1 : 1);
 	dir_r = ((msg->angular.z < 0) ? -1 : 1);
 
-	temp_x = _abs(msg->linear.x);
-	temp_y = _abs(msg->linear.y);
+	temp_x = _active_drive.scale * _abs(msg->linear.x);
+	temp_y = _active_drive.scale * _abs(msg->linear.y);
 	temp_r = _abs(msg->angular.z);
 		
 	// temp_x = _smoothing (temp_x);
 	// temp_y = _smoothing (temp_y);
 	// temp_r = _smoothing (temp_r) / 2;
 
+	/* the delta is the angular velocity * half the drive track */
+	delta = (temp_r * (_active_drive.track / 2));
 
+	ratio = _convert_mps_to_proportional(temp_x + delta);
+	if (ratio > 1.0)
+		temp_x /= ratio;
+
+	
 	switch (_active_drive.mode) {
+
 	case MODE_ACKERMAN:
 		/*
 		  with ackerman drive, steering is handled by a separate servo
@@ -937,21 +919,22 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		*/
 		speed[0] = temp_x * dir_x;
 		speed[0] = _convert_mps_to_proportional(speed[0]);
+		if (_abs(speed[0]) > 1.0)
+			speed[0] = 1.0 * dir_x;
 		
 		ROS_INFO("ackerman drive mode speed=%6.4f", speed[0]);
 		break;
+
 	case MODE_DIFFERENTIAL:
 		/*
 		  with differential drive, steering is handled by the relative speed of left and right servos
 		  we drive assigned servos by mixing linear.x and angular.z
-		  we compute the delta effect for left and right components
+		  we compute the delta for left and right components
 		  we use the sign of the angular velocity to determine which is the faster / slower
 		*/
 
-		
 		/* the delta is the angular velocity * half the drive track */
-		delta = (temp_r * (_active_drive.track / 2));
-
+		
 		if (dir_r > 0) {	// turning right
 			speed[0] = (temp_x + delta) * dir_x;
 			speed[1] = (temp_x - delta) * dir_x;
@@ -960,20 +943,31 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 			speed[1] = (temp_x + delta) * dir_x;
 		}
 
+		ROS_DEBUG("computed differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
+
+		/* if any of the results are greater that 1.0, we need to scale all the results down */
+		range = _max (_abs(speed[0]), _abs(speed[1]));
+		
+		ratio = _convert_mps_to_proportional(range);
+		if (ratio > 1.0) {
+			speed[0] /= ratio;
+			speed[1] /= ratio;
+		}
+		ROS_DEBUG("adjusted differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
+
 		speed[0] = _convert_mps_to_proportional(speed[0]);
 		speed[1] = _convert_mps_to_proportional(speed[1]);
+		ROS_DEBUG("converted differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
 
 		ROS_INFO("differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
 		break;
+
 	case MODE_MECANUM:
 		/*
 		  with mecanum drive, steering is handled by the relative speed of left and right servos
 		  with mecanum drive, lateral motion is handled by the rotation of front and rear servos
 		  we drive assigned servos by mixing linear.x and angular.z  and linear.y
 		*/
-
-		/* the delta is the angular velocity * half the drive track */
-		delta = (temp_r * (_active_drive.track / 2));
 
 		if (dir_r > 0) {	// turning right
 			speed[0] = speed[2] = (temp_x + delta) * dir_x;
@@ -987,28 +981,49 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		speed[3] -= temp_y * dir_y;
 		speed[1] += temp_y * dir_y;
 		speed[2] += temp_y * dir_y;
+		ROS_DEBUG("computed mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
+
+		range = _max (_max (_max (_abs(speed[0]), _abs(speed[1])), _abs(speed[2])), _abs(speed[3]));
+		ratio = _convert_mps_to_proportional(range);
+		if (ratio > 1.0) {
+			speed[0] /= ratio;
+			speed[1] /= ratio;
+			speed[2] /= ratio;
+			speed[3] /= ratio;
+		}
+		ROS_DEBUG("adjusted mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
 
 		speed[0] = _convert_mps_to_proportional(speed[0]);
 		speed[1] = _convert_mps_to_proportional(speed[1]);
 		speed[2] = _convert_mps_to_proportional(speed[2]);
 		speed[3] = _convert_mps_to_proportional(speed[3]);
+		ROS_DEBUG("converted mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
+
 
 		ROS_INFO("mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
 		break;
+
 	default:
 		break;
+
 	}
-		
+	
 	/* find all drive servos and set their new speed */
 	for (i=0; i<16; i++) {
-		if (_servo_configs[_active_board-1][i].mode_pos == POSITION_LEFTFRONT)
-			_set_pwm_interval_proportional (i+1, speed[0]);
-		if (_servo_configs[_active_board-1][i].mode_pos == POSITION_RIGHTFRONT)
+		// we use 'fall thru' on the switch statement to allow all necessary servos to be controlled
+		switch (_active_drive.mode) {
+		case MODE_MECANUM:
+			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_LEFTREAR)
+				_set_pwm_interval_proportional (i+1, speed[2]);
+			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_RIGHTREAR)
+				_set_pwm_interval_proportional (i+1, speed[3]);
+		case MODE_DIFFERENTIAL:
+			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_LEFTFRONT)
+				_set_pwm_interval_proportional (i+1, speed[0]);
+		case MODE_ACKERMAN:
+			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_RIGHTFRONT)
 			_set_pwm_interval_proportional (i+1, speed[1]);
-		if (_servo_configs[_active_board-1][i].mode_pos == POSITION_LEFTREAR)
-			_set_pwm_interval_proportional (i+1, speed[2]);
-		if (_servo_configs[_active_board-1][i].mode_pos == POSITION_RIGHTREAR)
-			_set_pwm_interval_proportional (i+1, speed[3]);
+		}
 	}
 }
 
@@ -1027,16 +1042,27 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
    The PWM boards drive LED and servos using pulse width modulation. The 12 bit interface means values are 0..4096.
    The size of the minimum width is determined by the frequency. is service is needed when using a board configured other than with the default I2C address and when using multiple boards.
 
-   If using the pwm_active_board service, it must be used before using other services or topics from this package.
+   If using the set_active_board() service, it must be used before using other services or topics from this package.
 
-   @param req an Int16 value for which board should be active(1..62).
-   @param res the return value
-   @returns an integer non-zero if an error occured
+   __Warning:__ Changing the frequency will affect any active servos.
 
-   Example request: "{}"
+   @param [in] req an Int16 value for the requested pulse frequency
+   @param [out] res the return value will be the new active frequency
+   @returns true
 
-__i2cpwm_board::IntValue__
-\include "IntValue.srv"
+   __i2cpwm_board::IntValue__
+   \include "IntValue.srv"
+
+   __Example__
+   \code{.sh}
+   # Analog RC servos are most often designed for 20ms pulses. This is achieved with a frequency of 50Hz.
+   # This software defaults to 50Hz. Use the set_pwm_frequncy() to change this frequency value. 
+   # It may be necessary or convenient to change the PWM frequency if using DC motors connected to PWM controllers. 
+   # It may also be convenient if using PWM to control LEDs.
+
+   rosservice call /set_pwm_frequency "{value: 50}"
+   \endcode
+
  */
 bool set_pwm_frequency (i2cpwm_board::IntValue::Request &req, i2cpwm_board::IntValue::Response &res)
 {
@@ -1059,18 +1085,25 @@ bool set_pwm_frequency (i2cpwm_board::IntValue::Request &req, i2cpwm_board::IntV
    the PWM boards which use the PCA9685 chip support addresses in the range 0x40 to 0x7E.
 
    This service is needed when using a board configured other than with the default I2C address and when using multiple boards.
-   If using the pwm_active_board service, it must be used before using other services or topics from this package.
+   If using the set_active_board() service, it must be used before using other services or topics from this package.
 
-   @param req an Int16 value for which board should be active(1..62).
-   @param res the return value
-   @returns an integer non-zero if an error occured
+   @param [in] req an Int16 value for which board should be active(1..62).
+   @param [out] res the return value will be the new active board
+   @returns true
 
-   Example request: "{}"
+   __i2cpwm_board::IntValue Message__
+   \include "IntValue.srv"
 
-__i2cpwm_board::IntValue__
-\include "IntValue.srv"
+   __Example__
+   \code{.sh}
+   # The default board is '1' which corresponds to an I2C address of 0x40 
+   # The PCA9685 supports up to 62 boards. Boards are numbered from 1 to 62
+   # all of the configuration services and all of the topic subscribers affect the active board
+
+   rosservice call /set_active_board "{value: 2}"
+   \endcode
  */
-bool set_pwm_active_board (i2cpwm_board::IntValue::Request &req, i2cpwm_board::IntValue::Response &res)
+bool set_active_board (i2cpwm_board::IntValue::Request &req, i2cpwm_board::IntValue::Response &res)
 {
 	int board;
 	res.error = 0;
@@ -1094,27 +1127,37 @@ bool set_pwm_active_board (i2cpwm_board::IntValue::Request &req, i2cpwm_board::I
 
    Setting these data are required before sending messages to the servos_proportional() topic as well as the servos_drive() topic. 
 
-   If more than one PWM board is present, the set_pwm_active_board() service is used to switch between boards prior to configuring servos.
+   If more than one PWM board is present, the set_active_board() service is used to switch between boards prior to configuring servos.
 
-   @param req an array of 'ServoConfig' which consists of a servo number (one based), center(0..4096), range(0..4096), and direction (±1).
-   @param res the return value
-   @returns an integer non-zero if an error occured
+   @param [in] req an array of 'ServoConfig' which consists of a servo number (one based), center(0..4096), range(0..4096), and direction (±1).
+   @param [out] res integer non-zero if an error occured
+   @returns true
 
-   __Example:__
-   \code{.sh}
-   # a differential drive - trank drive - robot configuration has a left and right motor, each oriented oposite the other
-   #
-   # use the servos_absolute() topic to determine the center position of the two servos
-   # note: since servos vary, they often have different center values
-   #
-   # the follow command configures the two motors for proportional control and normalizes their direction
-   rosservice call /config_servos "servos: [{servo: 1, center: 333, range: 100, direction: -1}, {servo: 2, center: 336, range: 100, direction: 1}]"
-   \endcode
-
-   __i2cpwm_board::ServosConfig___
+   __i2cpwm_board::ServosConfig__
    \include "ServosConfig.srv"
-   __i2cpwm_board::ServoConfig___
+   __i2cpwm_board::ServoConfig__
    \include "ServoConfig.msg"
+
+
+   __Example__
+   \code{.sh}
+   # this example makes the following assumptions about the hardware
+   # the servos have been connected to the PWM board starting with the first connector and proceeding in order
+   # any drive servos used for the left side servos are mounted opposite of those for the right side
+
+   # this example uses 2 servos
+   # the first servo is the left and the second servo is the right
+
+   # configure two continuous rotation servos associated with the drive system - these servos were determined to have a ragee of ±50
+
+   rosservice call /config_servos "servos: [{servo: 1, center: 333, range: 100, direction: -1}, \
+                                            {servo: 2, center: 336, range: 108, direction: 1}]"
+
+   # additionally configure one 180 degree servo (±90) used for a robot arm - this servo was determine to have a ragee of ±188
+
+   rosservice call /config_servos "servos: [{servo: 9, center: 344, range: 376, direction: -1}]" 
+
+   \endcode
  */
 bool config_servos (i2cpwm_board::ServosConfig::Request &req, i2cpwm_board::ServosConfig::Response &res)
 {
@@ -1171,9 +1214,14 @@ bool config_servos (i2cpwm_board::ServosConfig::Request &req, i2cpwm_board::Serv
    The drive mode consists of a string value for the type of drive desired: ackerman, differential, or mecanum.
    For each mode, the drive servos must be specified.
 
-   @param req is DriveMode with a string and a ServoArray' which consists of a servo number (1..16) and a value (1..4) indicating the drive sequence
-   @param res the return value
-   @returns an integer non-zero if an error occured
+   @param req [in] DriveMode configuration data
+   @param res [out] non-zero on error
+   @returns true 
+
+   The DriveMode input requires drive system details included: wheel RPM, wheel radius, and track width. 
+   ROS uses meters for measurements. The values of radius and track are expected in meters.
+
+   _A scale factor is available if necessary to compensate for linear vector values._
 
    The mode string is one of the following drive systems:
     -# 'ackerman' - (automobile steering) requires minimum of one servo for drive and uses some other servo for stearing..
@@ -1193,14 +1241,42 @@ bool config_servos (i2cpwm_board::ServosConfig::Request &req, i2cpwm_board::Serv
     position 3 corresponds to | | | left-rear
     position 4 corresponds to | | | right-rear
   
-	__Example__
-
-rosservice call /config_drive_mode "{mode: differential, scale: 1.0, servos: [{servo: 1, value: 1}, {servo: 2, value: 2}]}"
-
 	__i2cpwm_board::DriveMode__
 	\include "DriveMode.srv"
-   __i2cpwm_board::Servo Message__
-   \include "Servo.msg"
+	__i2cpwm_board::Servo Message__
+	\include "Servo.msg"
+
+   __Example__
+   \code{.sh}
+   # this example makes the following assumptions about the hardware
+   # the servos have been connected to the PWM board starting with the first connector and proceeding in order
+   # any drive servos used for the left side servos are mounted opposite of those for the right side
+
+   # ROS used m/s (meters per second) as th standard unit for velocity.
+   # The geometry_msgs::Twist linear and angular vectors are in m/s and radians/s respectively.
+
+   # differential drive example
+   # this example uses 2 servos
+   # the first servo is the left and the second servo is the right
+
+   rosservice call /config_drive_mode "{mode: differential, rpm: 56.0, radius: 0.0055, track: 0.015, scale: 1.0, \
+                                        servos: [{servo: 1, value: 1}, {servo: 2, value: 2}]}"
+
+   # this example uses 4 servos
+   # there are two servos for the left and two  fors the right
+
+   rosservice call /config_drive_mode "{mode: differential, rpm: 56.0, radius: 0.0055, track: 0.015, scale: 1.0, \
+                                        servos: [{servo: 1, value: 1}, {servo: 2, value: 2}, \
+                                                 {servo: 3, value: 1}, {servo: 4, value: 2}]}"
+
+   # mecanum drive example
+   # this example uses 4 servos
+
+   rosservice call /config_drive_mode "{mode: differential, rpm: 56.0, radius: 0.0055, track: 0.015, scale: 1.0, \
+                                        servos: [{servo: 1, value: 1}, {servo: 2, value: 2}, \
+                                                 {servo: 3, value: 1}, {servo: 4, value: 2}]}"
+
+   \endcode
  */
 bool config_drive_mode (i2cpwm_board::DriveMode::Request &req, i2cpwm_board::DriveMode::Response &res)
 {
@@ -1240,14 +1316,14 @@ bool config_drive_mode (i2cpwm_board::DriveMode::Request &req, i2cpwm_board::Dri
 
 	radius = req.radius;
 	if (radius <= 0.0) {
-		ROS_ERROR("Invalid radius %6.4f :: the wheel radius must be greater than 0.0 centimeters", radius);
+		ROS_ERROR("Invalid radius %6.4f :: the wheel radius must be greater than 0.0 meters", radius);
 		res.error = -1;
 		return true;
 	}
 
 	track = req.track;
 	if (track <= 0.0) {
-		ROS_ERROR("Invalid track %6.4f :: the axel track must be greater than 0.0 centimeters", track);
+		ROS_ERROR("Invalid track %6.4f :: the axel track must be greater than 0.0 meters", track);
 		res.error = -1;
 		return true;
 	}
@@ -1261,8 +1337,8 @@ bool config_drive_mode (i2cpwm_board::DriveMode::Request &req, i2cpwm_board::Dri
 
 	_active_drive.mode = mode;
 	_active_drive.rpm = rpm;
-	_active_drive.radius = radius / 100;	// the service takes the radius is centimeters and ROS uses meters
-	_active_drive.track = track / 100;		// the service takes the track is centimeters and ROS uses meters
+	_active_drive.radius = radius;	// the service takes the radius in meters
+	_active_drive.track = track;		// the service takes the track in meters
 	_active_drive.scale = scale;
 
 	for (i=0;i<req.servos.size();i++) {
@@ -1295,9 +1371,14 @@ bool config_drive_mode (i2cpwm_board::DriveMode::Request &req, i2cpwm_board::Dri
 
    @param req is empty
    @param res is empty
-   @returns nothing
+   @returns true
 
-   __rosservice example:__ `rosservice call /stop_servos`
+   __Example__
+   \code{.sh}
+   # stop all servos on all boards and setting them to coast rather than brake
+
+   rosservice call /stop_servos
+   \endcode
 
  */
 bool stop_servos (std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
@@ -1343,7 +1424,7 @@ int main (int argc, char **argv)
 	ros::NodeHandle n;
 
 
-	ros::ServiceServer board_srv =		n.advertiseService 	("set_pwm_active_board",		set_pwm_active_board);
+	ros::ServiceServer board_srv =		n.advertiseService 	("set_active_board",			set_active_board);
 	ros::ServiceServer freq_srv =		n.advertiseService 	("set_pwm_frequency", 			set_pwm_frequency);
 	ros::ServiceServer config_srv =		n.advertiseService 	("config_servos", 				config_servos);			// 'config' will setup the necessary properties of continuous servos and is helpful for standard servos
 	ros::ServiceServer mode_srv =		n.advertiseService 	("config_drive_mode",			config_drive_mode);		// 'mode' specifies which servos are used for motion and which behavior will be applied when driving
