@@ -878,7 +878,7 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 	/* msg is a pointer to a Twist message: msg->linear and msg->angular each of which have members .x .y .z */
 	/* the subscriber uses the maths from: http://robotsforroboticists.com/drive-kinematics/ */	
 
-	ROS_INFO("[%5.2f %5.2f %5.2f] [%5.2f %5.2f %5.2f]", 
+	ROS_INFO("servos_drive Twist = [%5.2f %5.2f %5.2f] [%5.2f %5.2f %5.2f]", 
 			 msg->linear.x, msg->linear.y, msg->linear.z, msg->angular.x, msg->angular.y, msg->angular.z);
 
 	if (_active_drive.mode == MODE_UNDEFINED) {
@@ -936,11 +936,11 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		/* the delta is the angular velocity * half the drive track */
 		
 		if (dir_r > 0) {	// turning right
-			speed[0] = (temp_x + delta) * dir_x;
-			speed[1] = (temp_x - delta) * dir_x;
-		} else {		// turning left
 			speed[0] = (temp_x - delta) * dir_x;
 			speed[1] = (temp_x + delta) * dir_x;
+		} else {		// turning left
+			speed[0] = (temp_x + delta) * dir_x;
+			speed[1] = (temp_x - delta) * dir_x;
 		}
 
 		ROS_DEBUG("computed differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
@@ -970,11 +970,11 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		*/
 
 		if (dir_r > 0) {	// turning right
-			speed[0] = speed[2] = (temp_x + delta) * dir_x;
-			speed[1] = speed[3] = (temp_x - delta) * dir_x;
-		} else {		// turning left
 			speed[0] = speed[2] = (temp_x - delta) * dir_x;
 			speed[1] = speed[3] = (temp_x + delta) * dir_x;
+		} else {		// turning left
+			speed[0] = speed[2] = (temp_x + delta) * dir_x;
+			speed[1] = speed[3] = (temp_x - delta) * dir_x;
 		}
 
 		speed[0] -= temp_y * dir_y;
