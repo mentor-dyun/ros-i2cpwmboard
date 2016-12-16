@@ -3,8 +3,8 @@
 # drive modes are one of: ackerman, differential, or mecanum
 # to accurately convert velocity in m/s the controller needs to know three values:
 #   the RPM    - the maximum output speed available from the drive motors
-#   the radius - the drive wheel radius in centimeters
-#   the track  - the distance between the left and right wheels in centimeters
+#   the radius - the drive wheel radius in meters
+#   the track  - the distance between the left and right wheels in meters
 # use the scale value to adjust incoming Twist values as needed to match the servo/motor capability
 
 
