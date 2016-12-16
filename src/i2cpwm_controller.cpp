@@ -1434,6 +1434,146 @@ int main (int argc, char **argv)
 	ros::Subscriber rel_sub = 			n.subscribe 		("servos_proportional", 500, 	servos_proportional);	// the 'proportion' topic will be used for standard servos and continuous rotation aka drive servos
 	ros::Subscriber drive_sub = 		n.subscribe 		("servos_drive", 500, 			servos_drive);			// the 'drive' topic will be used for continuous rotation aka drive servos controlled by Twist messages
 	
+	
+#if 0
+// parameter server support is incomplete
+	
+	pwm_frequency: 50
+    available_boards: [1, 2]
+
+    board_1/servo_1/center: 400
+    board_1/servo_1/range: 104
+    board_1/servo_1/direction: -1
+
+    drive/mode : mecanum
+    drive/rpm: 56.0
+    drive/radius: 0.0055
+    drive/track: 0.015
+    drive/board : 1
+    drive/left_front_servo: 1
+    drive/right_front_servo: 2
+    drive/left_rear_servo: 3
+    drive/right_rear_servo: 4
+    - or and example using two servos per side for tank drive - 
+    drive/mode : diferential
+    drive/left_servo: [1, 2]
+    drive/right_servo: [3, 4]
+
+    ----------------------------------------------------------------------------------------------------
+
+    {
+        int pwm;
+        std::vector<int> board_list;
+
+        nh.param ("/pwm_frequency", &pwm, 50);
+
+if (nh.hasParam ("/available_boards"))
+	nh.getParam("/available_boards", board_list);
+else
+	board_list = [1];
+
+
+/* attempt to configure servos */
+
+/* loop through all boards */
+for(unsigned i=0; i < board_list.size(); i++) {
+	_set_active_board(board_list[i]);
+	_set_pwm_frequnecy(pwm);
+
+	/* loop through all possible servos on a board */
+	for(unsigned j=1; j <= 16; j++) {
+		char param_name[128];
+
+		/* see if a servo is configured */
+		sprintf (param_name, "/board_%d/servo_%d", i, j);
+		if (nh.hasParam (param_name)) {
+			int center = 0, range = 0, direction = 0;
+			
+			/* get any available parameters for the servo */
+			sprintf (param_name, "/board_%d/servo_%d/center", i, j);
+			if (nh.hasParam (param_name))
+				nh.getParam (param_name, center);
+			sprintf (param_name, "/board_%d/servo_%d/range", i, j);
+			if (nh.hasParam (param_name))
+				nh.getParam (param_name, range);
+			sprintf (param_name, "/board_%d/servo_%d/direction", i, j);
+			if (nh.hasParam (param_name))
+				nh.getParam (param_name, direction);
+
+			/* if all necessary parameters for the servo have been set, configure the servo */
+			if (center && range && direction)
+				_servo_config (i, j, center, range, direction);
+		}
+	}
+}
+
+
+/* attempt to configure drive mode */
+
+if (nh.hasParam ("/drive/mode")) {
+	char param_name[128];
+	std::string mode;
+	float: rpm = 0.0, radius = 0.0, track = 0.0;
+	int board = 0;
+	std::vector<int> lf_servos, rf_servos, lr_servos, rr_servos;
+
+	/* get any available parameters for the mode */
+	nh.getParam ("/drive/mode", mode);
+
+	if (nh.hasParam ("/drive/rpm"))
+		nh.getParam ("/drive/rpm", rpm);
+	if (nh.hasParam ("/drive/radius"))
+		nh.getParam ("/drive/radius", radius);
+	if (nh.hasParam ("/drive/track"))
+		nh.getParam ("/drive/track", track);
+	if (nh.hasParam ("/drive/board"))
+		nh.getParam ("/drive/board", board);
+
+	if (mode == "ackerman") {
+		if (nh.hasParam ("/drive/drive_servo")) {
+			nh.getParam ("/drive/drive_servo", lf_servos);
+
+			_set_active_board(board);
+			_config_drive_mode (mode, rpm, radius, track, lf_servos);
+		} else {
+			/* error handling for missing servo assignment */
+		}
+	} else if (mode == "differential") {
+		if (nh.hasParam ("/drive/left_servo"))
+			nh.getParam ("/drive/left_servo", lf_servos);
+		if (nh.hasParam ("/drive/right_servo"))
+			nh.getParam ("/drive/right_servo", rf_servos);
+
+		if (lf_servos.size && rf_servos.size) {
+			_set_active_board(board);
+			_config_drive_mode (mode, rpm, radius, track, lf_servos, rf_servos);
+		} else {
+			/* error handling for missing servo assignments */
+		}
+	} else if (mode == "mecanum") {
+		if (nh.hasParam ("/drive/left_front_servo"))
+			nh.getParam ("/drive/left_front_servo", lf_servos);
+		if (nh.hasParam ("/drive/right_front_servo"))
+			nh.getParam ("/drive/right_front_servo", lf_servos);
+		if (nh.hasParam ("/drive/left_rear_servo"))
+			nh.getParam ("/drive/left_rear_servo", lr_servos);
+		if (nh.hasParam ("/drive/right_rear_servo"))
+			nh.getParam ("/drive/right_rear_servo", rr_servos);
+
+		if (lf_servos.size && rf_servos.size && lr_servos.size && rr_servos.size) {
+			_set_active_board(board);
+			_config_drive_mode (mode, rpm, radius, track, lf_servos, rf_servos, lr_servos, rr_servos);
+		} else {
+			/* error handling for missing servo assignments */
+		}
+	} else {
+		/* error handling for invalid type of drive mode */
+	}
+}
+
+#endif
+
+	
 	ros::spin();
 
 	close(_controller_io_handle);
