@@ -905,9 +905,9 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 	/* the delta is the angular velocity * half the drive track */
 	delta = (temp_r * (_active_drive.track / 2));
 
-	ratio = _convert_mps_to_proportional(temp_x + delta);
+	ratio = _convert_mps_to_proportional(temp_y + delta);
 	if (ratio > 1.0)
-		temp_x /= ratio;
+		temp_y /= ratio;
 
 	
 	switch (_active_drive.mode) {
@@ -936,11 +936,11 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		/* the delta is the angular velocity * half the drive track */
 		
 		if (dir_r > 0) {	// turning right
-			speed[0] = (temp_x - delta) * dir_x;
-			speed[1] = (temp_x + delta) * dir_x;
+			speed[0] = (temp_y + delta) * dir_y;
+			speed[1] = (temp_y - delta) * dir_y;
 		} else {		// turning left
-			speed[0] = (temp_x + delta) * dir_x;
-			speed[1] = (temp_x - delta) * dir_x;
+			speed[0] = (temp_y - delta) * dir_y;
+			speed[1] = (temp_y + delta) * dir_y;
 		}
 
 		ROS_DEBUG("computed differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
@@ -970,17 +970,17 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		*/
 
 		if (dir_r > 0) {	// turning right
-			speed[0] = speed[2] = (temp_x - delta) * dir_x;
-			speed[1] = speed[3] = (temp_x + delta) * dir_x;
+			speed[0] = speed[2] = (temp_y + delta) * dir_y;
+			speed[1] = speed[3] = (temp_y - delta) * dir_y;
 		} else {		// turning left
-			speed[0] = speed[2] = (temp_x + delta) * dir_x;
-			speed[1] = speed[3] = (temp_x - delta) * dir_x;
+			speed[0] = speed[2] = (temp_y - delta) * dir_y;
+			speed[1] = speed[3] = (temp_y + delta) * dir_y;
 		}
 
-		speed[0] -= temp_y * dir_y;
-		speed[3] -= temp_y * dir_y;
-		speed[1] += temp_y * dir_y;
-		speed[2] += temp_y * dir_y;
+		speed[0] += temp_x * dir_x;
+		speed[3] += temp_x * dir_x;
+		speed[1] -= temp_x * dir_x;
+		speed[2] -= temp_x * dir_x;
 		ROS_DEBUG("computed mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
 
 		range = _max (_max (_max (_abs(speed[0]), _abs(speed[1])), _abs(speed[2])), _abs(speed[3]));
