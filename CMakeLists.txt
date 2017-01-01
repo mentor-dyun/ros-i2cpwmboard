@@ -10,7 +10,7 @@ link_directories(${catkin_LIBRARY_DIRS})
 
 
 
-add_message_files(DIRECTORY msg FILES Servo.msg ServoArray.msg ServoConfig.msg ServoConfigArray.msg)
+add_message_files(DIRECTORY msg FILES Servo.msg ServoArray.msg ServoConfig.msg ServoConfigArray.msg Position.msg PositionArray.msg)
 
 add_service_files(DIRECTORY srv FILES IntValue.srv ServosConfig.srv DriveMode.srv)
 

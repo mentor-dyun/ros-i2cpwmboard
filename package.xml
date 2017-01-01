@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package>
   <name>i2cpwm_board</name>
-  <version>0.0.1</version>
+  <version>0.5.1</version>
   <description>controller for the Adafruit 16 channel PWM servo I2C board, hat, and similar PCA9685 based boards</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 

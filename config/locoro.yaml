@@ -1,0 +1,19 @@
+pwm_frequency: 50
+
+servo_config:
+  - {id: 1, center: 331, direction: -1, range: 106}
+  - {id: 2, center: 334, direction:  1, range: 108}
+  - {id: 3, center: 338, direction: -1, range: 108}
+  - {id: 4, center: 338, direction:  1, range: 112}
+
+drive_config:
+  mode: mecanum
+  radius: 0.062
+  rpm: 60.0
+  scale: 0.3
+  track: 0.2
+  servos:
+    - {id: 1, position: 1}
+    - {id: 2, position: 2}
+    - {id: 3, position: 3}
+    - {id: 4, position: 4}

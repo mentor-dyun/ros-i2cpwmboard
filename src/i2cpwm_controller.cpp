@@ -196,6 +196,8 @@
 #include "i2cpwm_board/ServosConfig.h"
 // request/response of the drive mode service
 #include "i2cpwm_board/DriveMode.h"
+#include "i2cpwm_board/Position.h"
+#include "i2cpwm_board/PositionArray.h"
 // request/response of the integer parameter services
 #include "i2cpwm_board/IntValue.h"
 
@@ -263,15 +265,21 @@ enum pwm_regs {
   __OUTDRV             = 0x04
 };
 
-servo_config _servo_configs[62][16];        // we can support up to 62 boards (1..62), each with 16 PWM devices (1..16)
-int _pwm_boards[62];                        // we can support up to 62 boards (1..62)
-int _controller_io_handle;                  // linux file handle for I2C
-int _active_board = 0;                      // used to determine if I2C SLAVE change is needed
-int _pwm_frequency = 50;                    // frequency determines the size of a pulse width; higher numbers make RC servos buzz
+#define MAX_BOARDS 62
+#define MAX_SERVOS (16*MAX_BOARDS)
+
+servo_config _servo_configs[MAX_SERVOS];    // we can support up to 62 boards (1..62), each with 16 PWM devices (1..16)
 drive_mode _active_drive;					// used when converting Twist geometry to PWM values and which servos are for motion
+int _last_servo = -1;
+
+int _pwm_boards[MAX_BOARDS];                // we can support up to 62 boards (1..62)
+int _active_board = 0;                      // used to determine if I2C SLAVE change is needed
+int _controller_io_handle;                  // linux file handle for I2C
+
+int _pwm_frequency = 50;                    // frequency determines the size of a pulse width; higher numbers make RC servos buzz
+
 
 /// @endcond PRIVATE_NO_PUBLIC DOC
-
 
 
 
@@ -379,109 +387,6 @@ static float _convert_mps_to_proportional (float speed)
 }
 
 
-/**
- * \private method to set a common value for all PWM channels on the active board
- *
- *The pulse defined by start/stop will be active on all channels until any subsequent call changes it.
- *@param start an int value (0..4096) indicating when the pulse will go high sending power to each channel.
- *@param end an int value (0..4096) indicating when the pulse will go low stoping power to each channel.
- *Example _set_pwm_interval_all (0, 108)   // set all servos with a pulse width of 105
- */
-static void _set_pwm_interval_all (int start, int end)
-{
-    // the public API is ONE based and hardware is ZERO based
-    if ((_active_board<1) || (_active_board>62)) {
-        ROS_ERROR("Invalid active board number %d :: PWM board numbers must be between 1 and 62", _active_board);
-        return;
-    }
-    int board = _active_board - 1;
-
-    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_ON_L, start & 0xFF))
-        ROS_ERROR ("Error setting PWM start low byte for all servos on board %d", _active_board);
-    if (0 >  i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_ON_H, start  >> 8))
-        ROS_ERROR ("Error setting PWM start high byte for all servos on board %d", _active_board);
-    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_OFF_L, end & 0xFF))
-        ROS_ERROR ("Error setting PWM end low byte for all servos on board %d", _active_board);
-    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_OFF_H, end >> 8))
-        ROS_ERROR ("Error setting PWM end high byte for all servos on board %d", _active_board);
-};
-
-
-/**
- * \private method to set a value for a PWM channel on the active board
- *
- *The pulse defined by start/stop will be active on the specified servo channel until any subsequent call changes it.
- *@param servo an int value (1..16) indicating which channel to change power
- *@param start an int value (0..4096) indicating when the pulse will go high sending power to each channel.
- *@param end an int value (0..4096) indicating when the pulse will go low stoping power to each channel.
- *Example _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
- */
-static void _set_pwm_interval (int servo, int start, int end)
-{
-	ROS_DEBUG("_set_pwm_interval enter");
-    // the public API is ONE based and hardware is ZERO based
-    if ((_active_board<1) || (_active_board>62)) {
-        ROS_ERROR("Invalid active board number %d :: PWM board numbers must be between 1 and 62", _active_board);
-        return;
-    }
-    int board = _active_board - 1;
-
-	ROS_DEBUG("_set_pwm_interval board=%d", board);
-    // the public API is ONE based and hardware is ZERO based
-    if ((servo<1) || (servo>16)) {
-        ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and 16", servo);
-        return;
-    }
-    int channel = servo - 1;
-    
-    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_ON_L+4*channel, start & 0xFF))
-        ROS_ERROR ("Error setting PWM start low byte on servo %d on board %d", servo, _active_board);
-    if (0 >  i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_ON_H+4*channel, start  >> 8))
-        ROS_ERROR ("Error setting PWM start high byte on servo %d on board %d", servo, _active_board);
-    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_OFF_L+4*channel, end & 0xFF))
-        ROS_ERROR ("Error setting PWM end low byte on servo %d on board %d", servo, _active_board);
-    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_OFF_H+4*channel, end >> 8))
-        ROS_ERROR ("Error setting PWM end high byte on servo %d on board %d", servo, _active_board);
-};
-
-
-
-/**
- * \private method to set a value for a PWM channel, based on a range of ±1.0, on the active board
- *
- *The pulse defined by start/stop will be active on the specified servo channel until any subsequent call changes it.
- *@param servo an int value (1..16) indicating which channel to change power
- *@param value an int value (±1.0) indicating when the size of the pulse for the channel.
- *Example _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
- */
-static void _set_pwm_interval_proportional (int servo, float value)
-{
-	if ((servo < 1) && (servo > 16)) {
-		ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and 16", servo);
-		return;
-	}
-	if ((value < -1.0) || (value > 1.0)) {
-		ROS_ERROR("Invalid proportion value %f :: proportion values must be between -1.0 and 1.0", value);
-		return;
-	}
-
-	servo_config* configp = &(_servo_configs[_active_board-1][servo-1]);
-	
-	if ((configp->center < 0) ||(configp->range < 0)) {
-		ROS_ERROR("Missing servo configuration for servo[%d]", servo);
-		return;
-	}
-
-	int pos = (configp->direction * (((float)(configp->range) / 2) * value)) + configp->center;
-        
-	if ((pos < 0) || (pos > 4096)) {
-		ROS_ERROR("Invalid computed position servo[%d] = (direction(%d) * ((range(%d) / 2) * value(%6.4f))) + %d = %d", servo, configp->direction, configp->range, value, configp->center, pos);
-		return;
-	}
-	_set_pwm_interval (servo, 0, pos);
-	ROS_INFO("servo[%d] = (direction(%d) * ((range(%d) / 2) * value(%6.4f))) + %d = %d", servo, configp->direction, configp->range, value, configp->center, pos);
-}
-
 
 /**
  * \private method to set a pulse frequency
@@ -529,7 +434,37 @@ static void _set_pwm_frequency (int freq)
 
     if (0 > i2c_smbus_write_byte_data(_controller_io_handle, __MODE1, oldmode | 0x80))
         ROS_ERROR("Unable to restore PWM controller to active mode");
-};
+}
+
+
+
+/**
+ * \private method to set a common value for all PWM channels on the active board
+ *
+ *The pulse defined by start/stop will be active on all channels until any subsequent call changes it.
+ *@param start an int value (0..4096) indicating when the pulse will go high sending power to each channel.
+ *@param end an int value (0..4096) indicating when the pulse will go low stoping power to each channel.
+ *Example _set_pwm_interval_all (0, 108)   // set all servos with a pulse width of 105
+ */
+static void _set_pwm_interval_all (int start, int end)
+{
+    // the public API is ONE based and hardware is ZERO based
+    if ((_active_board<1) || (_active_board>62)) {
+        ROS_ERROR("Internal error - invalid active board number %d :: PWM board numbers must be between 1 and 62", _active_board);
+        return;
+    }
+    int board = _active_board - 1;
+
+    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_ON_L, start & 0xFF))
+        ROS_ERROR ("Error setting PWM start low byte for all servos on board %d", _active_board);
+    if (0 >  i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_ON_H, start  >> 8))
+        ROS_ERROR ("Error setting PWM start high byte for all servos on board %d", _active_board);
+    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_OFF_L, end & 0xFF))
+        ROS_ERROR ("Error setting PWM end low byte for all servos on board %d", _active_board);
+    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __ALL_CHANNELS_OFF_H, end >> 8))
+        ROS_ERROR ("Error setting PWM end high byte for all servos on board %d", _active_board);
+}
+
 
 
 /**
@@ -586,6 +521,185 @@ static void _set_active_board (int board)
 }
 
 
+
+/**
+ * \private method to set a value for a PWM channel on the active board
+ *
+ *The pulse defined by start/stop will be active on the specified servo channel until any subsequent call changes it.
+ *@param servo an int value (1..16) indicating which channel to change power
+ *@param start an int value (0..4096) indicating when the pulse will go high sending power to each channel.
+ *@param end an int value (0..4096) indicating when the pulse will go low stoping power to each channel.
+ *Example _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
+ */
+static void _set_pwm_interval (int servo, int start, int end)
+{
+	ROS_DEBUG("_set_pwm_interval enter");
+
+    if ((servo<1) || (servo>(MAX_SERVOS))) {
+        ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and %d", servo, MAX_BOARDS);
+        return;
+    }
+
+	int board = ((int)(servo/16))+1;
+	_set_active_board(board);
+
+	servo = servo % 16;
+
+    board = _active_board - 1;
+
+	ROS_DEBUG("_set_pwm_interval board=%d", board);
+    // the public API is ONE based and hardware is ZERO based
+
+    int channel = servo - 1;
+    
+    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_ON_L+4*channel, start & 0xFF))
+        ROS_ERROR ("Error setting PWM start low byte on servo %d on board %d", servo, _active_board);
+    if (0 >  i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_ON_H+4*channel, start  >> 8))
+        ROS_ERROR ("Error setting PWM start high byte on servo %d on board %d", servo, _active_board);
+    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_OFF_L+4*channel, end & 0xFF))
+        ROS_ERROR ("Error setting PWM end low byte on servo %d on board %d", servo, _active_board);
+    if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_OFF_H+4*channel, end >> 8))
+        ROS_ERROR ("Error setting PWM end high byte on servo %d on board %d", servo, _active_board);
+}
+
+
+
+/**
+ * \private method to set a value for a PWM channel, based on a range of ±1.0, on the active board
+ *
+ *The pulse defined by start/stop will be active on the specified servo channel until any subsequent call changes it.
+ *@param servo an int value (1..16) indicating which channel to change power
+ *@param value an int value (±1.0) indicating when the size of the pulse for the channel.
+ *Example _set_pwm_interval (3, 0, 350)    // set servo #3 (fourth position on the hardware board) with a pulse of 350
+ */
+static void _set_pwm_interval_proportional (int servo, float value)
+{
+	if ((value < -1.0) || (value > 1.0)) {
+		ROS_ERROR("Invalid proportion value %f :: proportion values must be between -1.0 and 1.0", value);
+		return;
+	}
+
+	servo_config* configp = &(_servo_configs[servo-1]);
+	
+	if ((configp->center < 0) ||(configp->range < 0)) {
+		ROS_ERROR("Missing servo configuration for servo[%d]", servo);
+		return;
+	}
+
+	int pos = (configp->direction * (((float)(configp->range) / 2) * value)) + configp->center;
+        
+	if ((pos < 0) || (pos > 4096)) {
+		ROS_ERROR("Invalid computed position servo[%d] = (direction(%d) * ((range(%d) / 2) * value(%6.4f))) + %d = %d", servo, configp->direction, configp->range, value, configp->center, pos);
+		return;
+	}
+	_set_pwm_interval (servo, 0, pos);
+	ROS_DEBUG("servo[%d] = (direction(%d) * ((range(%d) / 2) * value(%6.4f))) + %d = %d", servo, configp->direction, configp->range, value, configp->center, pos);
+}
+
+
+
+/**
+ * \private method to configure a servo on the active board
+ *
+ *@param servo an int value (1..16)
+ *@param center an int value gt 1
+ *@param range int value gt 1
+ *@param direction an int  either -1 or 1
+ *Example _config_server (1, 300, 100, -1)   // configure the first servo with a center of 300 and range of 100 and reversed direction
+ */
+static void _config_servo (int servo, int center, int range, int direction)
+{
+	if ((servo < 1) || (servo > (MAX_SERVOS))) {
+		ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and %d", servo, MAX_SERVOS);
+		return;
+	}
+
+	if ((center < 0) || (center > 4096))
+		ROS_ERROR("Invalid center value %d :: center values must be between 0 and 4096", center);
+
+	if ((center < 0) || (center > 4096))
+		ROS_ERROR("Invalid range value %d :: range values must be between 0 and 4096", range);
+
+	if (((center - (range/2)) < 0) || (((range/2) + center) > 4096))
+		ROS_ERROR("Invalid range center combination %d ± %d :: range/2 ± center must be between 0 and 4096", center, (range/2));
+
+	_servo_configs[servo-1].center = center;
+	_servo_configs[servo-1].range = range;
+	_servo_configs[servo-1].direction = direction;
+	_servo_configs[servo-1].mode_pos = POSITION_UNDEFINED;
+
+	if (servo > _last_servo)	// used for internal optimizations
+		_last_servo = servo;
+
+	ROS_INFO("Servo #%d configured: center=%d, range=%d, direction=%d", servo, center, range, direction);
+}
+
+
+static int _config_servo_position (int servo, int position)
+{
+	if ((servo < 1) || (servo > (MAX_SERVOS))) {
+		ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and %d", servo, MAX_SERVOS);
+		return -1;
+	}
+	if ((position < POSITION_UNDEFINED) || (position > POSITION_RIGHTREAR)) {
+		ROS_ERROR("Invalid drive mode position %d :: positions are 0 = non-drive, 1 = left front, 2 = right front, 3 = left rear, and 4 = right rear", position);
+		return -1;
+	}
+	_servo_configs[servo-1].mode_pos = position;
+	ROS_INFO("Servo #%d configured: position=%d", servo, position);
+	return 0;
+}
+
+
+static int _config_drive_mode (std::string mode, float rpm, float radius, float track, float scale)
+{
+	int mode_val = MODE_UNDEFINED;
+
+	// assumes the parameter was provided in the proper case
+	if 		(0 == strcmp (mode.c_str(), _CONST("ackerman")))
+		mode_val = MODE_ACKERMAN;
+	else if (0 == strcmp (mode.c_str(), _CONST("differential")))
+		mode_val = MODE_DIFFERENTIAL;
+	else if (0 == strcmp (mode.c_str(), _CONST("mecanum")))
+		mode_val = MODE_MECANUM;
+	else {
+		mode_val = MODE_INVALID;
+		ROS_ERROR("Invalid drive mode %s :: drive mode must be one of ackerman, differential, or mecanum", mode.c_str());
+		return -1;
+	}
+
+	if (rpm <= 0.0) {
+		ROS_ERROR("Invalid RPM %6.4f :: the motor's output RPM must be greater than 0.0", rpm);
+		return -1;
+	}
+
+	if (radius <= 0.0) {
+		ROS_ERROR("Invalid radius %6.4f :: the wheel radius must be greater than 0.0 meters", radius);
+		return -1;
+	}
+
+	if (track <= 0.0) {
+		ROS_ERROR("Invalid track %6.4f :: the axel track must be greater than 0.0 meters", track);
+		return -1;
+	}
+
+	if (scale <= 0.0) {
+		ROS_ERROR("Invalid scale %6.4f :: the scalar for Twist messages must be greater than 0.0", scale);
+		return -1;
+	}
+
+	_active_drive.mode = mode_val;
+	_active_drive.rpm = rpm;
+	_active_drive.radius = radius;	// the service takes the radius in meters
+	_active_drive.track = track;		// the service takes the track in meters
+	_active_drive.scale = scale;
+
+	ROS_INFO("Drive mode configured: mode=%s, rpm=%6.4f, radius=%6.4f, track=%6.4f, scale=%6.4f", mode.c_str(), rpm, radius, track, scale);
+	return 0;
+}
+
+
+
 /**
  \private method to initialize private internal data structures at startup
 
@@ -597,23 +711,22 @@ static void _init (char* filename)
 {
     int res;
     char mode1res;
-    int i,j;
+    int i;
 
     /* initialize all of the global data objects */
     
-    for (j=0; j<64;j++) {
-        for (i=0; i<16;i++) {
-            // these values have not useful meaning
-            _servo_configs[j][i].center = -1;
-            _servo_configs[j][i].range = -1;
-            _servo_configs[j][i].direction = 1;
-            _servo_configs[j][i].mode_pos = -1;
-        }
-    }
-
-    for (j=0; j<64;j++)
-        _pwm_boards[j] = -1;
+    for (i=0; i<MAX_BOARDS;i++)
+        _pwm_boards[i] = -1;
     _active_board = -1;
+
+	for (i=0; i<(MAX_SERVOS);i++) {
+		// these values have not useful meaning
+		_servo_configs[i].center = -1;
+		_servo_configs[i].range = -1;
+		_servo_configs[i].direction = 1;
+		_servo_configs[i].mode_pos = -1;
+	}
+	_last_servo = -1;
 
 	_active_drive.mode = MODE_UNDEFINED;
 	_active_drive.rpm = -1.0;
@@ -627,7 +740,6 @@ static void _init (char* filename)
         return; /* exit(1) */   /* additional ERROR HANDLING information is available with 'errno' */
     }
 }
-
 
 
 
@@ -690,16 +802,12 @@ void servos_absolute (const i2cpwm_board::ServoArray::ConstPtr& msg)
         int servo = sp->servo;
         int value = sp->value;
 
-        if ((servo < 1) && (servo > 16)) {
-            ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and 16", servo);
-            continue;
-        }
         if ((value < 0) || (value > 4096)) {
             ROS_ERROR("Invalid PWM value %d :: PWM values must be between 0 and 4096", value);
             continue;
         }
         _set_pwm_interval (servo, 0, value);
-        ROS_INFO("servo[%d] = %d", servo, value);
+        ROS_DEBUG("servo[%d] = %d", servo, value);
     }
 }
 
@@ -878,7 +986,7 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 	/* msg is a pointer to a Twist message: msg->linear and msg->angular each of which have members .x .y .z */
 	/* the subscriber uses the maths from: http://robotsforroboticists.com/drive-kinematics/ */	
 
-	ROS_INFO("servos_drive Twist = [%5.2f %5.2f %5.2f] [%5.2f %5.2f %5.2f]", 
+	ROS_DEBUG("servos_drive Twist = [%5.2f %5.2f %5.2f] [%5.2f %5.2f %5.2f]", 
 			 msg->linear.x, msg->linear.y, msg->linear.z, msg->angular.x, msg->angular.y, msg->angular.z);
 
 	if (_active_drive.mode == MODE_UNDEFINED) {
@@ -922,7 +1030,7 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		if (_abs(speed[0]) > 1.0)
 			speed[0] = 1.0 * dir_x;
 		
-		ROS_INFO("ackerman drive mode speed=%6.4f", speed[0]);
+		ROS_DEBUG("ackerman drive mode speed=%6.4f", speed[0]);
 		break;
 
 	case MODE_DIFFERENTIAL:
@@ -957,9 +1065,8 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 
 		speed[0] = _convert_mps_to_proportional(speed[0]);
 		speed[1] = _convert_mps_to_proportional(speed[1]);
-		ROS_DEBUG("converted differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
 
-		ROS_INFO("differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
+		ROS_DEBUG("differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
 		break;
 
 	case MODE_MECANUM:
@@ -997,10 +1104,8 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		speed[1] = _convert_mps_to_proportional(speed[1]);
 		speed[2] = _convert_mps_to_proportional(speed[2]);
 		speed[3] = _convert_mps_to_proportional(speed[3]);
-		ROS_DEBUG("converted mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
 
-
-		ROS_INFO("mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
+		ROS_DEBUG("mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
 		break;
 
 	default:
@@ -1009,19 +1114,19 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 	}
 	
 	/* find all drive servos and set their new speed */
-	for (i=0; i<16; i++) {
+	for (i=0; i<(_last_servo); i++) {
 		// we use 'fall thru' on the switch statement to allow all necessary servos to be controlled
 		switch (_active_drive.mode) {
 		case MODE_MECANUM:
-			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_LEFTREAR)
+			if (_servo_configs[i].mode_pos == POSITION_LEFTREAR)
 				_set_pwm_interval_proportional (i+1, speed[2]);
-			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_RIGHTREAR)
+			if (_servo_configs[i].mode_pos == POSITION_RIGHTREAR)
 				_set_pwm_interval_proportional (i+1, speed[3]);
 		case MODE_DIFFERENTIAL:
-			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_LEFTFRONT)
+			if (_servo_configs[i].mode_pos == POSITION_LEFTFRONT)
 				_set_pwm_interval_proportional (i+1, speed[0]);
 		case MODE_ACKERMAN:
-			if (_servo_configs[_active_board-1][i].mode_pos == POSITION_RIGHTFRONT)
+			if (_servo_configs[i].mode_pos == POSITION_RIGHTFRONT)
 			_set_pwm_interval_proportional (i+1, speed[1]);
 		}
 	}
@@ -1078,45 +1183,6 @@ bool set_pwm_frequency (i2cpwm_board::IntValue::Request &req, i2cpwm_board::IntV
 	return true;
 }
 
-/**
-   \brief service to set active PWM board
-
-   A service to set or switch which PWM board is active. By default, board #0 is active and uses I2C 0x40 address.
-   the PWM boards which use the PCA9685 chip support addresses in the range 0x40 to 0x7E.
-
-   This service is needed when using a board configured other than with the default I2C address and when using multiple boards.
-   If using the set_active_board() service, it must be used before using other services or topics from this package.
-
-   @param [in] req an Int16 value for which board should be active(1..62).
-   @param [out] res the return value will be the new active board
-   @returns true
-
-   __i2cpwm_board::IntValue Message__
-   \include "IntValue.srv"
-
-   __Example__
-   \code{.sh}
-   # The default board is '1' which corresponds to an I2C address of 0x40 
-   # The PCA9685 supports up to 62 boards. Boards are numbered from 1 to 62
-   # all of the configuration services and all of the topic subscribers affect the active board
-
-   rosservice call /set_active_board "{value: 2}"
-   \endcode
- */
-bool set_active_board (i2cpwm_board::IntValue::Request &req, i2cpwm_board::IntValue::Response &res)
-{
-	int board;
-	res.error = 0;
-	board = req.value;
-	if ((board<1) || (board>62)) {
-		ROS_ERROR("Invalid board number %d :: PWM board numbers must be between 1 and 62", board);
-		board = 1;
-	}
-	_set_active_board (board);
-	_set_pwm_frequency (_pwm_frequency);	// I think we must reset frequency when we change boards
-	res.error = board;
-	return true;
-}
 
 /**
    \brief store configuration data for servos on the active board
@@ -1167,7 +1233,7 @@ bool config_servos (i2cpwm_board::ServosConfig::Request &req, i2cpwm_board::Serv
 	res.error = 0;
 
 	if ((_active_board<1) || (_active_board>62)) {
-		ROS_ERROR("Invalid board number %d :: PWM board numbers must be between 1 and 62", _active_board);
+		ROS_ERROR("Internal error - invalid board number %d :: PWM board numbers must be between 1 and 62", _active_board);
 		res.error = -1;
 		return true;
 	}
@@ -1178,29 +1244,9 @@ bool config_servos (i2cpwm_board::ServosConfig::Request &req, i2cpwm_board::Serv
 		int range = req.servos[i].range;
 		int direction = req.servos[i].direction;
 
-		if ((servo < 1) || (servo > 16)) {
-			ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and 16", servo);
-			res.error = servo; /* this needs to be more specific and indicate a bad server ID was provided */
-			continue;
-		}
-		if ((center < 0) || (center > 4096)) {
-			ROS_ERROR("Invalid center value %d :: center values must be between 0 and 4096", center);
-			continue;
-		}
-		if ((center < 0) || (center > 4096)) {
-			ROS_ERROR("Invalid range value %d :: range values must be between 0 and 4096", range);
-			continue;
-		}
-		if (((center - (range/2)) < 0) || (((range/2) + center) > 4096)) {
-			ROS_ERROR("Invalid range center combination %d ± %d :: range/2 ± center must be between 0 and 4096", center, (range/2));
-			continue;
-		}
-
-		_servo_configs[_active_board-1][servo-1].center = center;
-		_servo_configs[_active_board-1][servo-1].range = range;
-		_servo_configs[_active_board-1][servo-1].direction = direction;
-		_servo_configs[_active_board-1][servo-1].mode_pos = POSITION_UNDEFINED;
+		_config_servo (servo, center, range, direction);
 	}
+	
 	return true;
 }
 
@@ -1243,8 +1289,8 @@ bool config_servos (i2cpwm_board::ServosConfig::Request &req, i2cpwm_board::Serv
   
 	__i2cpwm_board::DriveMode__
 	\include "DriveMode.srv"
-	__i2cpwm_board::Servo Message__
-	\include "Servo.msg"
+	__i2cpwm_board::Position__
+	\include "Position.msg"
 
    __Example__
    \code{.sh}
@@ -1283,83 +1329,23 @@ bool config_drive_mode (i2cpwm_board::DriveMode::Request &req, i2cpwm_board::Dri
 	res.error = 0;
 
 	int i;
-	int mode = MODE_UNDEFINED;
-	float scale, rpm, radius, track;
 
-	if ((_active_board < 1) || (_active_board > 62)) {
-		ROS_ERROR("Invalid board number %d :: board numbers must be between 1 and 62", _active_board);
-		res.error = -1; /* this needs to be more specific and indicate a bad server ID was provided */
+	if ((res.error = _config_drive_mode (req.mode, req.rpm, req.radius, req.track, req.scale)))
 		return true;
-	}
-
-
-	// assumes the parameter was provided in the proper case
-	if 		(0 == strcmp (req.mode.c_str(), _CONST("ackerman")))
-		mode = MODE_ACKERMAN;
-	else if (0 == strcmp (req.mode.c_str(), _CONST("differential")))
-		mode = MODE_DIFFERENTIAL;
-	else if (0 == strcmp (req.mode.c_str(), _CONST("mecanum")))
-		mode = MODE_MECANUM;
-	else {
-		mode = MODE_INVALID;
-		ROS_ERROR("Invalid drive mode %s :: drive mode must be one of ackerman, differential, or mecanum", req.mode.c_str());
-		res.error = -1;
-		return true;
-	}
-
-	rpm = req.rpm;
-	if (rpm <= 0.0) {
-		ROS_ERROR("Invalid RPM %6.4f :: the motor's output RPM must be greater than 0.0", rpm);
-		res.error = -1;
-		return true;
-	}
-
-	radius = req.radius;
-	if (radius <= 0.0) {
-		ROS_ERROR("Invalid radius %6.4f :: the wheel radius must be greater than 0.0 meters", radius);
-		res.error = -1;
-		return true;
-	}
-
-	track = req.track;
-	if (track <= 0.0) {
-		ROS_ERROR("Invalid track %6.4f :: the axel track must be greater than 0.0 meters", track);
-		res.error = -1;
-		return true;
-	}
-
-	scale = req.scale;
-	if (scale <= 0.0) {
-		ROS_ERROR("Invalid scale %6.4f :: the scalar for Twist messages must be greater than 0.0", scale);
-		res.error = -1;
-		return true;
-	}
-
-	_active_drive.mode = mode;
-	_active_drive.rpm = rpm;
-	_active_drive.radius = radius;	// the service takes the radius in meters
-	_active_drive.track = track;		// the service takes the track in meters
-	_active_drive.scale = scale;
 
 	for (i=0;i<req.servos.size();i++) {
 		int servo = req.servos[i].servo;
-		int position = req.servos[i].value;
+		int position = req.servos[i].position;
 
-		if ((servo < 1) || (servo > 16)) {
-			ROS_ERROR("Invalid servo number %d :: servo numbers must be between 1 and 16", servo);
+		if (_config_servo_position (servo, position) != 0) {
 			res.error = servo; /* this needs to be more specific and indicate a bad server ID was provided */
 			continue;
 		}
-		if ((position < POSITION_UNDEFINED) || (position > POSITION_RIGHTREAR)) {
-			ROS_ERROR("Invalid drive mode position %d :: positions are 0 = non-drive, 1 = left front, 2 = right front, 3 = left rear, and 4 = right rear", position);
-			continue;
-		}
-
-		_servo_configs[_active_board-1][servo-1].mode_pos = position;
 	}
 
 	return true;
 }
+
 
 
 /**
@@ -1386,7 +1372,7 @@ bool stop_servos (std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
 	int save_active = _active_board;
 	int i;
 
-	for (i=0; i<62; i++) {
+	for (i=0; i<MAX_BOARDS; i++) {
 		if (_pwm_boards[i] > 0) {
 			_set_active_board (i+1);	// API is ONE based
 			_set_pwm_interval_all (0, 0);
@@ -1398,6 +1384,172 @@ bool stop_servos (std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
 
 
 
+
+
+static std::string _get_string_param (XmlRpc::XmlRpcValue obj, std::string param_name)
+{
+	XmlRpc::XmlRpcValue &item = obj[param_name];
+	if (item.getType() == XmlRpc::XmlRpcValue::TypeString)
+		return item;
+
+	ROS_WARN("invalid paramter type for %s - expected TypeString", param_name.c_str());
+	return 0;
+}
+
+	
+static int _get_int_param (XmlRpc::XmlRpcValue obj, std::string param_name)
+{
+	XmlRpc::XmlRpcValue &item = obj[param_name];
+	if (item.getType() == XmlRpc::XmlRpcValue::TypeInt)
+		return item;
+
+	ROS_WARN("invalid paramter type for %s - expected TypeInt", param_name.c_str());
+	return 0;
+}
+
+	
+static double _get_float_param (XmlRpc::XmlRpcValue obj, std::string param_name)
+{
+	XmlRpc::XmlRpcValue &item = obj[param_name];
+	if (item.getType() == XmlRpc::XmlRpcValue::TypeDouble)
+		return item;
+
+	ROS_WARN("invalid paramter type for %s - expected TypeDouble", param_name.c_str());
+	return 0;
+}
+
+	
+static int _load_params (void)
+{		
+	ros::NodeHandle nhp;					// not currently private namespace
+
+	/*
+	  pwm_frequency: 50
+	*/
+
+	int pwm;
+	nhp.param ("pwm_frequency", pwm, 50);
+
+	
+	/*
+	  // note: servos are numbered sequntially with '1' being the first servo on board #1, '17' is the first servo on board #2
+
+	  servo_config:
+	  	- {id: 1, center: 333, direction: -1, range: 100}
+		- {id: 2, center: 336, direction: 1, range: 108}
+
+	*/
+	// attempt to load configuration for servos
+	if(nhp.hasParam ("servo_config")) {
+		XmlRpc::XmlRpcValue servos;
+		nhp.getParam ("servo_config", servos);
+
+		if(servos.getType() == XmlRpc::XmlRpcValue::TypeArray) {
+			ROS_DEBUG("Retrieving members from 'servo_config' in namespace(%s)", nhp.getNamespace().c_str());
+				
+			for(int32_t i = 0; i < servos.size(); i++) {
+				XmlRpc::XmlRpcValue servo;
+				servo = servos[i];	// get the data from the iterator
+				if(servo.getType() == XmlRpc::XmlRpcValue::TypeStruct) {
+					ROS_DEBUG("Retrieving items from 'servo_config' member %d in namespace(%s)", i, nhp.getNamespace().c_str());
+
+					// get the servo settings
+					int id = 0, center = 0, direction = 0, range = 0;
+					id = _get_int_param (servo, "id");
+					center = _get_int_param (servo, "center");
+					direction = _get_int_param (servo, "direction");
+					range = _get_int_param (servo, "range");
+					
+					if (id && center && direction && range) {
+						if ((id >= 1) && (id <= MAX_SERVOS)) {
+							int board = ((int)(id / 16)) + 1;
+							_set_active_board (board);
+							_set_pwm_frequency (pwm);
+							_config_servo (id, center, range, direction);
+						}
+						else
+							ROS_WARN("Parameter servo id=%d is out of bounds", id);
+					}
+					else
+						ROS_WARN("Invalid parameters for servo id=%d'", id);
+				}
+				else
+					ROS_WARN("Invalid type %d for member of 'servo_config' - expected TypeStruct(%d)", servo.getType(), XmlRpc::XmlRpcValue::TypeStruct);
+			}
+		}
+		else
+			ROS_WARN("Invalid type %d for 'servo_config' - expected TypeArray(%d)", servos.getType(), XmlRpc::XmlRpcValue::TypeArray);
+	}
+	else
+		ROS_DEBUG("Parameter Server namespace[%s] does not contain 'servo_config", nhp.getNamespace().c_str());
+
+
+	/*
+	  drive_config:
+	  	mode: mecanum
+		radius: 0.062
+		rpm: 60.0
+		scale: 0.3
+		track: 0.2
+		servos:
+			- {id: 1, position: 1}
+			- {id: 2, position: 2}
+			- {id: 3, position: 3}
+			- {id: 4, position: 4}
+	*/
+
+	// attempt to load configuration for drive mode
+	if(nhp.hasParam ("drive_config")) {
+		XmlRpc::XmlRpcValue drive;
+		nhp.getParam ("drive_config", drive);
+
+		if(drive.getType() == XmlRpc::XmlRpcValue::TypeStruct) {
+			ROS_DEBUG("Retrieving members from 'drive_config' in namespace(%s)", nhp.getNamespace().c_str());
+
+			// get the drive mode settings
+			std::string mode;
+			float radius, rpm, scale, track;
+			int id, position;
+
+			mode = _get_string_param (drive, "mode");
+			rpm = _get_float_param (drive, "rpm");
+			radius = _get_float_param (drive, "radius");
+			track = _get_float_param (drive, "track");
+			scale = _get_float_param (drive, "scale");
+
+			_config_drive_mode (mode, rpm, radius, track, scale);
+
+			XmlRpc::XmlRpcValue &servos = drive["servos"];
+			if(servos.getType() == XmlRpc::XmlRpcValue::TypeArray) {
+				ROS_DEBUG("Retrieving members from 'drive_config/servos' in namespace(%s)", nhp.getNamespace().c_str());
+				
+				for(int32_t i = 0; i < servos.size(); i++) {
+					XmlRpc::XmlRpcValue servo;
+					servo = servos[i];	// get the data from the iterator
+					if(servo.getType() == XmlRpc::XmlRpcValue::TypeStruct) {
+						ROS_DEBUG("Retrieving items from 'drive_config/servos' member %d in namespace(%s)", i, nhp.getNamespace().c_str());
+
+						// get the servo position settings
+						int id, position;
+						id = _get_int_param (servo, "id");
+						position = _get_int_param (servo, "position");
+					
+						if (id && position)
+							_config_servo_position (id, position); // had its own error reporting
+					}
+					else
+						ROS_WARN("Invalid type %d for member %d of 'drive_config/servos' - expected TypeStruct(%d)", i, servo.getType(), XmlRpc::XmlRpcValue::TypeStruct);
+				}
+			}
+			else
+				ROS_WARN("Invalid type %d for 'drive_config/servos' - expected TypeArray(%d)", servos.getType(), XmlRpc::XmlRpcValue::TypeArray);
+		}
+		else
+			ROS_WARN("Invalid type %d for 'drive_config' - expected TypeStruct(%d)", drive.getType(), XmlRpc::XmlRpcValue::TypeStruct);
+	}
+	else
+		ROS_DEBUG("Parameter Server namespace[%s] does not contain 'drive_config", nhp.getNamespace().c_str());
+}	
 
 
 // ------------------------------------------------------------------------------------------------------------------------------------
@@ -1423,8 +1575,6 @@ int main (int argc, char **argv)
 
 	ros::NodeHandle n;
 
-
-	ros::ServiceServer board_srv =		n.advertiseService 	("set_active_board",			set_active_board);
 	ros::ServiceServer freq_srv =		n.advertiseService 	("set_pwm_frequency", 			set_pwm_frequency);
 	ros::ServiceServer config_srv =		n.advertiseService 	("config_servos", 				config_servos);			// 'config' will setup the necessary properties of continuous servos and is helpful for standard servos
 	ros::ServiceServer mode_srv =		n.advertiseService 	("config_drive_mode",			config_drive_mode);		// 'mode' specifies which servos are used for motion and which behavior will be applied when driving
@@ -1434,149 +1584,11 @@ int main (int argc, char **argv)
 	ros::Subscriber rel_sub = 			n.subscribe 		("servos_proportional", 500, 	servos_proportional);	// the 'proportion' topic will be used for standard servos and continuous rotation aka drive servos
 	ros::Subscriber drive_sub = 		n.subscribe 		("servos_drive", 500, 			servos_drive);			// the 'drive' topic will be used for continuous rotation aka drive servos controlled by Twist messages
 	
-	
-#if 0
-// parameter server support is incomplete
-	
-	pwm_frequency: 50
-    available_boards: [1, 2]
-
-    board_1/servo_1/center: 400
-    board_1/servo_1/range: 104
-    board_1/servo_1/direction: -1
-
-    drive/mode : mecanum
-    drive/rpm: 56.0
-    drive/radius: 0.0055
-    drive/track: 0.015
-    drive/board : 1
-    drive/left_front_servo: 1
-    drive/right_front_servo: 2
-    drive/left_rear_servo: 3
-    drive/right_rear_servo: 4
-    - or and example using two servos per side for tank drive - 
-    drive/mode : diferential
-    drive/left_servo: [1, 2]
-    drive/right_servo: [3, 4]
-
-    ----------------------------------------------------------------------------------------------------
-
-    {
-        int pwm;
-        std::vector<int> board_list;
-
-        nh.param ("/pwm_frequency", &pwm, 50);
-
-if (nh.hasParam ("/available_boards"))
-	nh.getParam("/available_boards", board_list);
-else
-	board_list = [1];
-
-
-/* attempt to configure servos */
-
-/* loop through all boards */
-for(unsigned i=0; i < board_list.size(); i++) {
-	_set_active_board(board_list[i]);
-	_set_pwm_frequnecy(pwm);
-
-	/* loop through all possible servos on a board */
-	for(unsigned j=1; j <= 16; j++) {
-		char param_name[128];
-
-		/* see if a servo is configured */
-		sprintf (param_name, "/board_%d/servo_%d", i, j);
-		if (nh.hasParam (param_name)) {
-			int center = 0, range = 0, direction = 0;
-			
-			/* get any available parameters for the servo */
-			sprintf (param_name, "/board_%d/servo_%d/center", i, j);
-			if (nh.hasParam (param_name))
-				nh.getParam (param_name, center);
-			sprintf (param_name, "/board_%d/servo_%d/range", i, j);
-			if (nh.hasParam (param_name))
-				nh.getParam (param_name, range);
-			sprintf (param_name, "/board_%d/servo_%d/direction", i, j);
-			if (nh.hasParam (param_name))
-				nh.getParam (param_name, direction);
-
-			/* if all necessary parameters for the servo have been set, configure the servo */
-			if (center && range && direction)
-				_servo_config (i, j, center, range, direction);
-		}
-	}
-}
-
-
-/* attempt to configure drive mode */
-
-if (nh.hasParam ("/drive/mode")) {
-	char param_name[128];
-	std::string mode;
-	float: rpm = 0.0, radius = 0.0, track = 0.0;
-	int board = 0;
-	std::vector<int> lf_servos, rf_servos, lr_servos, rr_servos;
-
-	/* get any available parameters for the mode */
-	nh.getParam ("/drive/mode", mode);
-
-	if (nh.hasParam ("/drive/rpm"))
-		nh.getParam ("/drive/rpm", rpm);
-	if (nh.hasParam ("/drive/radius"))
-		nh.getParam ("/drive/radius", radius);
-	if (nh.hasParam ("/drive/track"))
-		nh.getParam ("/drive/track", track);
-	if (nh.hasParam ("/drive/board"))
-		nh.getParam ("/drive/board", board);
-
-	if (mode == "ackerman") {
-		if (nh.hasParam ("/drive/drive_servo")) {
-			nh.getParam ("/drive/drive_servo", lf_servos);
-
-			_set_active_board(board);
-			_config_drive_mode (mode, rpm, radius, track, lf_servos);
-		} else {
-			/* error handling for missing servo assignment */
-		}
-	} else if (mode == "differential") {
-		if (nh.hasParam ("/drive/left_servo"))
-			nh.getParam ("/drive/left_servo", lf_servos);
-		if (nh.hasParam ("/drive/right_servo"))
-			nh.getParam ("/drive/right_servo", rf_servos);
-
-		if (lf_servos.size && rf_servos.size) {
-			_set_active_board(board);
-			_config_drive_mode (mode, rpm, radius, track, lf_servos, rf_servos);
-		} else {
-			/* error handling for missing servo assignments */
-		}
-	} else if (mode == "mecanum") {
-		if (nh.hasParam ("/drive/left_front_servo"))
-			nh.getParam ("/drive/left_front_servo", lf_servos);
-		if (nh.hasParam ("/drive/right_front_servo"))
-			nh.getParam ("/drive/right_front_servo", lf_servos);
-		if (nh.hasParam ("/drive/left_rear_servo"))
-			nh.getParam ("/drive/left_rear_servo", lr_servos);
-		if (nh.hasParam ("/drive/right_rear_servo"))
-			nh.getParam ("/drive/right_rear_servo", rr_servos);
-
-		if (lf_servos.size && rf_servos.size && lr_servos.size && rr_servos.size) {
-			_set_active_board(board);
-			_config_drive_mode (mode, rpm, radius, track, lf_servos, rf_servos, lr_servos, rr_servos);
-		} else {
-			/* error handling for missing servo assignments */
-		}
-	} else {
-		/* error handling for invalid type of drive mode */
-	}
-}
-
-#endif
-
+	_load_params();
 	
 	ros::spin();
 
-	close(_controller_io_handle);
+	close (_controller_io_handle);
 
   return 0;
 }

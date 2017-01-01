@@ -20,7 +20,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;">
    <a href="./index.html"><div id="projectname">i2cpwm_board
-   &#160;<span id="projectnumber">0.0.1</span>
+   &#160;<span id="projectnumber">0.5.1</span>
    </div></a>
    <div id="projectbrief">ROS Package for PCA9685 based 16 channel PWM Board with I2C Interface</div>
   </td>
@@ -66,6 +66,8 @@
 <code>#include &quot;i2cpwm_board/ServoConfigArray.h&quot;</code><br />
 <code>#include &quot;i2cpwm_board/ServosConfig.h&quot;</code><br />
 <code>#include &quot;i2cpwm_board/DriveMode.h&quot;</code><br />
+<code>#include &quot;i2cpwm_board/Position.h&quot;</code><br />
+<code>#include &quot;i2cpwm_board/PositionArray.h&quot;</code><br />
 <code>#include &quot;i2cpwm_board/IntValue.h&quot;</code><br />
 </div>
 <p><a href="i2cpwm__controller_8cpp_source.html">Go to the source code of this file.</a></p>
@@ -84,9 +86,6 @@ Functions</h2></td></tr>
 <tr class="memitem:ga948cb0dd7ba8c2ac4c7f2d2d93940d85"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___services.html#ga948cb0dd7ba8c2ac4c7f2d2d93940d85">set_pwm_frequency</a> (i2cpwm_board::IntValue::Request &amp;req, i2cpwm_board::IntValue::Response &amp;res)</td></tr>
 <tr class="memdesc:ga948cb0dd7ba8c2ac4c7f2d2d93940d85"><td class="mdescLeft">&#160;</td><td class="mdescRight">service to set set PWM frequency  <a href="group___services.html#ga948cb0dd7ba8c2ac4c7f2d2d93940d85">More...</a><br /></td></tr>
 <tr class="separator:ga948cb0dd7ba8c2ac4c7f2d2d93940d85"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga39f8243257b7e3c399c1e240b71bc8ca"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___services.html#ga39f8243257b7e3c399c1e240b71bc8ca">set_active_board</a> (i2cpwm_board::IntValue::Request &amp;req, i2cpwm_board::IntValue::Response &amp;res)</td></tr>
-<tr class="memdesc:ga39f8243257b7e3c399c1e240b71bc8ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">service to set active PWM board  <a href="group___services.html#ga39f8243257b7e3c399c1e240b71bc8ca">More...</a><br /></td></tr>
-<tr class="separator:ga39f8243257b7e3c399c1e240b71bc8ca"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gabf512716d4497c6a4cb7bf9c5d94e2f1"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___services.html#gabf512716d4497c6a4cb7bf9c5d94e2f1">config_servos</a> (i2cpwm_board::ServosConfig::Request &amp;req, i2cpwm_board::ServosConfig::Response &amp;res)</td></tr>
 <tr class="memdesc:gabf512716d4497c6a4cb7bf9c5d94e2f1"><td class="mdescLeft">&#160;</td><td class="mdescRight">store configuration data for servos on the active board  <a href="group___services.html#gabf512716d4497c6a4cb7bf9c5d94e2f1">More...</a><br /></td></tr>
 <tr class="separator:gabf512716d4497c6a4cb7bf9c5d94e2f1"><td class="memSeparator" colspan="2">&#160;</td></tr>

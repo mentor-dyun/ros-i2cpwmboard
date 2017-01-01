@@ -1,4 +1,6 @@
 <launch>
-	<include file="/root/catkin/src/ros-i2cpwmboard/launch/i2cpwm_node.launch"/>
-	<include file="/opt/ros/kinetic/share/rosbridge_server/launch/rosbridge_websocket.launch"/>
+	<include file="$(find i2cpwm_board)/launch/i2cpwm_node.launch"/>
+	<include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch"/>
+
+	<rosparam file="$(find i2cpwm_board)/config/locoro.yaml" command="load" />
 </launch>
