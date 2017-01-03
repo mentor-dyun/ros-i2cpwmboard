@@ -478,7 +478,7 @@ static void _set_active_board (int board)
 	char mode1res;
 
 	if ((board<1) || (board>62)) {
-        ROS_ERROR("Invalid board number %d :: board numbers must be between 1 and 62", board);
+        ROS_ERROR("Internal error :: invalid board number %d :: board numbers must be between 1 and 62", board);
         return;
     }
     if (_active_board != board) {
@@ -574,7 +574,8 @@ static void _set_pwm_interval (int servo, int start, int end)
  */
 static void _set_pwm_interval_proportional (int servo, float value)
 {
-	if ((value < -1.0) || (value > 1.0)) {
+	// need a little wiggle room to allow for accuracy of a floating point value
+	if ((value < -1.0001) || (value > 1.0001)) {
 		ROS_ERROR("Invalid proportion value %f :: proportion values must be between -1.0 and 1.0", value);
 		return;
 	}
@@ -1004,15 +1005,18 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 
 	temp_x = _active_drive.scale * _abs(msg->linear.x);
 	temp_y = _active_drive.scale * _abs(msg->linear.y);
-	temp_r = _abs(msg->angular.z);
+	temp_r = _abs(msg->angular.z);	// radians
 		
 	// temp_x = _smoothing (temp_x);
 	// temp_y = _smoothing (temp_y);
 	// temp_r = _smoothing (temp_r) / 2;
 
-	/* the delta is the angular velocity * half the drive track */
-	delta = (temp_r * (_active_drive.track / 2));
+	// the differential rate is the robot rotational circumference / angular velocity
+	// since the differential rate is applied to both sides in opposite amounts it is halved
+	delta = (_active_drive.track / 2) * temp_r;
+	// delta is now in meters/sec
 
+	// determine if we will over-speed the motor and scal accordingly
 	ratio = _convert_mps_to_proportional(temp_y + delta);
 	if (ratio > 1.0)
 		temp_y /= ratio;
@@ -1435,8 +1439,8 @@ static int _load_params (void)
 	  // note: servos are numbered sequntially with '1' being the first servo on board #1, '17' is the first servo on board #2
 
 	  servo_config:
-	  	- {id: 1, center: 333, direction: -1, range: 100}
-		- {id: 2, center: 336, direction: 1, range: 108}
+	  	- {servo: 1, center: 333, direction: -1, range: 100}
+		- {servo: 2, center: 336, direction: 1, range: 108}
 
 	*/
 	// attempt to load configuration for servos
@@ -1454,8 +1458,8 @@ static int _load_params (void)
 					ROS_DEBUG("Retrieving items from 'servo_config' member %d in namespace(%s)", i, nhp.getNamespace().c_str());
 
 					// get the servo settings
-					int id = 0, center = 0, direction = 0, range = 0;
-					id = _get_int_param (servo, "id");
+					int id, center, direction, range;
+					id = _get_int_param (servo, "servo");
 					center = _get_int_param (servo, "center");
 					direction = _get_int_param (servo, "direction");
 					range = _get_int_param (servo, "range");
@@ -1468,10 +1472,10 @@ static int _load_params (void)
 							_config_servo (id, center, range, direction);
 						}
 						else
-							ROS_WARN("Parameter servo id=%d is out of bounds", id);
+							ROS_WARN("Parameter servo=%d is out of bounds", id);
 					}
 					else
-						ROS_WARN("Invalid parameters for servo id=%d'", id);
+						ROS_WARN("Invalid parameters for servo=%d'", id);
 				}
 				else
 					ROS_WARN("Invalid type %d for member of 'servo_config' - expected TypeStruct(%d)", servo.getType(), XmlRpc::XmlRpcValue::TypeStruct);
@@ -1492,10 +1496,10 @@ static int _load_params (void)
 		scale: 0.3
 		track: 0.2
 		servos:
-			- {id: 1, position: 1}
-			- {id: 2, position: 2}
-			- {id: 3, position: 3}
-			- {id: 4, position: 4}
+			- {servo: 1, position: 1}
+			- {servo: 2, position: 2}
+			- {servo: 3, position: 3}
+			- {servo: 4, position: 4}
 	*/
 
 	// attempt to load configuration for drive mode
@@ -1531,7 +1535,7 @@ static int _load_params (void)
 
 						// get the servo position settings
 						int id, position;
-						id = _get_int_param (servo, "id");
+						id = _get_int_param (servo, "servo");
 						position = _get_int_param (servo, "position");
 					
 						if (id && position)
