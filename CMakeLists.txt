@@ -1,9 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(i2cpwm_board)
 
-#catkin_python_setup()
-
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs message_generation)
+find_package(catkin REQUIRED COMPONENTS roscpp std_msgs message_generation)
 
 
 add_message_files(DIRECTORY msg FILES Servo.msg ServoArray.msg ServoConfig.msg ServoConfigArray.msg Position.msg PositionArray.msg)
@@ -24,12 +22,12 @@ add_executable(i2cpwm_board src/i2cpwm_controller.cpp)
 target_link_libraries(i2cpwm_board ${catkin_LIBRARIES})
 add_dependencies(i2cpwm_board i2cpwm_board_generate_messages_cpp)
 
-install(DIRECTORY include/${PROJECT_NAME} DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION} FILES_MATCHING PATTERN "*.h" )
-
-install(TARGETS i2cpwm_board RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION} LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} )
-
-install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION} )
-
-
+install(TARGETS i2cpwm_board
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION} 
+	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} 
+	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} 
+)
+install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION} FILES_MATCHING PATTERN "*.h" )
+install(DIRECTORY launch/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch )
 
 execute_process(COMMAND doxygen doc/Doxyfile)

@@ -8,7 +8,7 @@
   </description>
 
   <author>Bradan Lane Studio</author>
-  <maintainer email="info@bradanlane.com">bradanlane</maintainer>
+  <maintainer email="locoro@bradanlane.com">bradanlane</maintainer>
   <license>GPLv3</license>
   <url>https://gitlab.com/bradanlane/ros-i2cpwmboard</url>
 
