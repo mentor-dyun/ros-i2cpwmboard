@@ -540,17 +540,16 @@ static void _set_pwm_interval (int servo, int start, int end)
         return;
     }
 
-	int board = ((int)(servo/16))+1;
+	int board = ((int)((servo-1)/16))+1;	// servo 1..16 is board #1, servo 17..32 is board #2, etc.
 	_set_active_board(board);
 
-	servo = servo % 16;
+	servo = ((servo-1) % 16) + 1;			// servo numbers are 1..16
 
-    board = _active_board - 1;
 
-	ROS_DEBUG("_set_pwm_interval board=%d", board);
     // the public API is ONE based and hardware is ZERO based
-
-    int channel = servo - 1;
+    board = _active_board - 1;				// the hardware enumerates boards as 0..61
+    int channel = servo - 1;				// the hardware enumerates servos as 0..15
+	ROS_DEBUG("_set_pwm_interval board=%d servo=%d", board, servo);
     
     if (0 > i2c_smbus_write_byte_data (_controller_io_handle, __CHANNEL_ON_L+4*channel, start & 0xFF))
         ROS_ERROR ("Error setting PWM start low byte on servo %d on board %d", servo, _active_board);
@@ -765,6 +764,8 @@ static void _init (char* filename)
    The topic is also used to find the range of a servo - the maximum clockwise and anti clockwise positions. The difference between these two is the servo's range.
    If the servo rotates slightly more in one direction from center than the other, then '2X' the lesser value should be used as the range to preserve the middle stop position.
 
+   Hint: setting the servo pulse value to zero (0) causes the servo to power off. This is refered to as 'coast'. setting a servo to its center value leaves the servo powered and is refered to as 'brake'.
+
    @param msg  a 'ServoArray' message (array of one or more 'Servo') where the servo:value is the pulse position/speed
 
    __i2cpwm_board::ServoArray__
@@ -792,6 +793,9 @@ static void _init (char* filename)
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 330}]}"
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 335}]}"
    rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 333}]}"
+
+   # power off servo - eg 'coast' rather than 'brake'
+   rostopic pub -1 /servos_absolute i2cpwm_board/ServoArray "{servos:[{servo: 1, value: 0}]}"
    \endcode
 
  */
@@ -1017,9 +1021,9 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 	// delta is now in meters/sec
 
 	// determine if we will over-speed the motor and scal accordingly
-	ratio = _convert_mps_to_proportional(temp_y + delta);
+	ratio = _convert_mps_to_proportional(temp_x + delta);
 	if (ratio > 1.0)
-		temp_y /= ratio;
+		temp_x /= ratio;
 
 	
 	switch (_active_drive.mode) {
@@ -1048,11 +1052,11 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		/* the delta is the angular velocity * half the drive track */
 		
 		if (dir_r > 0) {	// turning right
-			speed[0] = (temp_y + delta) * dir_y;
-			speed[1] = (temp_y - delta) * dir_y;
+			speed[0] = (temp_x + delta) * dir_x;
+			speed[1] = (temp_x - delta) * dir_x;
 		} else {		// turning left
-			speed[0] = (temp_y - delta) * dir_y;
-			speed[1] = (temp_y + delta) * dir_y;
+			speed[0] = (temp_x - delta) * dir_x;
+			speed[1] = (temp_x + delta) * dir_x;
 		}
 
 		ROS_DEBUG("computed differential drive mode speed left=%6.4f right=%6.4f", speed[0], speed[1]);
@@ -1081,17 +1085,17 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		*/
 
 		if (dir_r > 0) {	// turning right
-			speed[0] = speed[2] = (temp_y + delta) * dir_y;
-			speed[1] = speed[3] = (temp_y - delta) * dir_y;
+			speed[0] = speed[2] = (temp_x + delta) * dir_x;
+			speed[1] = speed[3] = (temp_x - delta) * dir_x;
 		} else {		// turning left
-			speed[0] = speed[2] = (temp_y - delta) * dir_y;
-			speed[1] = speed[3] = (temp_y + delta) * dir_y;
+			speed[0] = speed[2] = (temp_x - delta) * dir_x;
+			speed[1] = speed[3] = (temp_x + delta) * dir_x;
 		}
 
-		speed[0] += temp_x * dir_x;
-		speed[3] += temp_x * dir_x;
-		speed[1] -= temp_x * dir_x;
-		speed[2] -= temp_x * dir_x;
+		speed[0] += temp_y * dir_y;
+		speed[3] += temp_y * dir_y;
+		speed[1] -= temp_y * dir_y;
+		speed[2] -= temp_y * dir_y;
 		ROS_DEBUG("computed mecanum drive mode speed leftfront=%6.4f rightfront=%6.4f leftrear=%6.4f rightreer=%6.4f", speed[0], speed[1], speed[2], speed[3]);
 
 		range = _max (_max (_max (_abs(speed[0]), _abs(speed[1])), _abs(speed[2])), _abs(speed[3]));
