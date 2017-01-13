@@ -626,7 +626,7 @@ static void _config_servo (int servo, int center, int range, int direction)
 	_servo_configs[servo-1].center = center;
 	_servo_configs[servo-1].range = range;
 	_servo_configs[servo-1].direction = direction;
-	_servo_configs[servo-1].mode_pos = POSITION_UNDEFINED;
+	// _servo_configs[servo-1].mode_pos = POSITION_UNDEFINED;
 
 	if (servo > _last_servo)	// used for internal optimizations
 		_last_servo = servo;
