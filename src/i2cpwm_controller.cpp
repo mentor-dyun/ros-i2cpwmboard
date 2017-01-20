@@ -275,6 +275,7 @@ int _last_servo = -1;
 int _pwm_boards[MAX_BOARDS];                // we can support up to 62 boards (1..62)
 int _active_board = 0;                      // used to determine if I2C SLAVE change is needed
 int _controller_io_handle;                  // linux file handle for I2C
+int _controller_io_device;                  // linux file for I2C
 
 int _pwm_frequency = 50;                    // frequency determines the size of a pulse width; higher numbers make RC servos buzz
 
@@ -707,7 +708,7 @@ static int _config_drive_mode (std::string mode, float rpm, float radius, float 
 
 Example _init ("/dev/i2c-1");  // default I2C device on RPi2 and RPi3 = "/dev/i2c-1"
  */
-static void _init (char* filename)
+static void _init (const char* filename)
 {
     int res;
     char mode1res;
@@ -739,6 +740,7 @@ static void _init (char* filename)
         ROS_FATAL ("Failed to open I2C bus %s", filename);
         return; /* exit(1) */   /* additional ERROR HANDLING information is available with 'errno' */
     }
+	ROS_INFO ("I2C bus opened on %s", filename);
 }
 
 
@@ -1431,12 +1433,17 @@ static int _load_params (void)
 {		
 	ros::NodeHandle nhp;					// not currently private namespace
 
-	/*
-	  pwm_frequency: 50
-	*/
+	// default I2C device on RPi2 and RPi3 = "/dev/i2c-1" Orange Pi Lite = "/dev/i2c-0"
+	nhp.param ("i2c_device_number", _controller_io_device, 1);
+	std::stringstream device;
+	device << "/dev/i2c-" << _controller_io_device;
+	_init (device.str().c_str());
+
+	_set_active_board (1);
 
 	int pwm;
 	nhp.param ("pwm_frequency", pwm, 50);
+	_set_pwm_frequency (pwm);
 
 	
 	/*
@@ -1567,17 +1574,12 @@ static int _load_params (void)
 
 int main (int argc, char **argv)
 {
-
+	// globals
+	_controller_io_device = 1;	// default I2C device on RPi2 and RPi3 = "/dev/i2c-1" Orange Pi Lite = "/dev/i2c-0"
 	_controller_io_handle = 0;
 	_pwm_frequency = 50;		// set the initial pulse frequency to 50 Hz which is standard for RC servos
 
 	
-	_init (_CONST("/dev/i2c-1"));	// default I2C device on RPi2 and RPi3 = "/dev/i2c-1";
-
-	_set_active_board (1);
-
-	_set_pwm_frequency (50);
-
 
 	ros::init (argc, argv, "i2cpwm_controller");
 
@@ -1592,8 +1594,9 @@ int main (int argc, char **argv)
 	ros::Subscriber rel_sub = 			n.subscribe 		("servos_proportional", 500, 	servos_proportional);	// the 'proportion' topic will be used for standard servos and continuous rotation aka drive servos
 	ros::Subscriber drive_sub = 		n.subscribe 		("servos_drive", 500, 			servos_drive);			// the 'drive' topic will be used for continuous rotation aka drive servos controlled by Twist messages
 	
-	_load_params();
+	_load_params();	// loads parameters and performs initialization
 	
+
 	ros::spin();
 
 	close (_controller_io_handle);
