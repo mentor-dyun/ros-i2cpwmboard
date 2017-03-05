@@ -1128,16 +1128,16 @@ void servos_drive (const geometry_msgs::Twist::ConstPtr& msg)
 		// we use 'fall thru' on the switch statement to allow all necessary servos to be controlled
 		switch (_active_drive.mode) {
 		case MODE_MECANUM:
-			if (_servo_configs[i].mode_pos == POSITION_LEFTREAR)
-				_set_pwm_interval_proportional (i+1, speed[2]);
 			if (_servo_configs[i].mode_pos == POSITION_RIGHTREAR)
 				_set_pwm_interval_proportional (i+1, speed[3]);
+			if (_servo_configs[i].mode_pos == POSITION_LEFTREAR)
+				_set_pwm_interval_proportional (i+1, speed[2]);
 		case MODE_DIFFERENTIAL:
-			if (_servo_configs[i].mode_pos == POSITION_LEFTFRONT)
-				_set_pwm_interval_proportional (i+1, speed[0]);
-		case MODE_ACKERMAN:
 			if (_servo_configs[i].mode_pos == POSITION_RIGHTFRONT)
 			_set_pwm_interval_proportional (i+1, speed[1]);
+		case MODE_ACKERMAN:
+			if (_servo_configs[i].mode_pos == POSITION_LEFTFRONT)
+				_set_pwm_interval_proportional (i+1, speed[0]);
 		}
 	}
 }
