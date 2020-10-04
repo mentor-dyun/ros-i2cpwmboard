@@ -8,3 +8,7 @@ LoCoRo Robot demo video: https://vimeo.com/189997166
 Status: parameter initialization added.
 
 The LoCoRo (low cost robot) project configuration and launch files have been moved to a separate poroject: https://gitlab.com/bradanlane/locoro
+
+--
+
+Forked project from gitlab to github: gitlab.com/bradanlane/ros-i2cpwmboard
