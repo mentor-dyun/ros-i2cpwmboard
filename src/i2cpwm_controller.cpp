@@ -177,7 +177,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/i2c-dev.h>
-
+extern "C" {
+#include <i2c/smbus.h>
+}
 #include <ros/ros.h>
 #include <ros/console.h>
 

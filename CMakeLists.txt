@@ -19,7 +19,7 @@ link_directories(${catkin_LIBRARY_DIRS})
 
 
 add_executable(i2cpwm_board src/i2cpwm_controller.cpp)
-target_link_libraries(i2cpwm_board ${catkin_LIBRARIES})
+target_link_libraries(i2cpwm_board ${catkin_LIBRARIES} i2c)
 add_dependencies(i2cpwm_board i2cpwm_board_generate_messages_cpp)
 
 install(TARGETS i2cpwm_board
