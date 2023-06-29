@@ -1567,6 +1567,8 @@ static int _load_params (void)
 	}
 	else
 		ROS_DEBUG("Parameter Server namespace[%s] does not contain 'drive_config", nhp.getNamespace().c_str());
+
+	return 0;
 }	
 
 
@@ -1598,7 +1600,10 @@ int main (int argc, char **argv)
 	ros::Subscriber drive_sub = 		n.subscribe 		("servos_drive", 500, 			servos_drive);			// the 'drive' topic will be used for continuous rotation aka drive servos controlled by Twist messages
 	
 	_load_params();	// loads parameters and performs initialization
-	
+
+	/* if ( ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug) ) {
+        ros::console::notifyLoggerLevelsChanged();
+	} */
 
 	ros::spin();
 
